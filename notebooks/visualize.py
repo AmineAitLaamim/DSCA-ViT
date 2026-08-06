@@ -316,26 +316,136 @@ def visualize_cross_attention(model: DSCAViT, image_path: str) -> None:
 
 
 # ============================================================
-# Usage example
+# Usage — Dataset Discovery (diagnostic)
 # ============================================================
 
-# Replace with a real image path from your dataset
-SAMPLE_IMAGE = "/content/HER2_Dataset/WSI-based-dataset/test/class_3+/some_image.png"
+# ------------------------------------------------------------
+# Inspect the actual filesystem so we don't guess paths.
+# Prints what exists under /content and the current directory.
+# ------------------------------------------------------------
 
-# Visualization 1: Color deconvolution (no model needed)
-visualize_deconvolution(SAMPLE_IMAGE)
+import os
+from pathlib import Path
 
-# Visualization 1b: CRITICAL — Batch deconvolution sanity check (20 random patches)
-# Run this FIRST before training. Inspect the output figure:
-#   - H channel should show nuclei/morphology (blue)
-#   - DAB channel should show brown HER2 membrane signal
-# If the separation looks wrong, the fixed Ruifrok stain vectors are
-# miscalibrated for this dataset and the dual-stream premise is invalid.
-TRAIN_ROOT = "/content/HER2_Dataset/WSI-based-dataset/train"
-visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)
+print("=" * 60)
+print("DATASET DISCOVERY — what actually exists")
+print("=" * 60)
 
-# Load trained model for visualizations 2 and 3
+# 1. Show the current working directory
+cwd = Path.cwd()
+print(f"\nCurrent working directory: {cwd}")
+print(f"  exists: {cwd.exists()}")
+
+# 2. Show top-level of /content (Colab) if it exists
+content = Path("/content")
+if content.exists():
+    print(f"\n/content contents:")
+    for p in sorted(content.iterdir()):
+        kind = "DIR " if p.is_dir() else "FILE"
+        print(f"  [{kind}] {p.name}")
+else:
+    print(f"\n/content does not exist (not in Colab?)")
+
+# 3. Show top-level of the current working directory
+print(f"\n{cwd} contents:")
+for p in sorted(cwd.iterdir()):
+    kind = "DIR " if p.is_dir() else "FILE"
+    print(f"  [{kind}] {p.name}")
+
+# 4. Search for likely dataset roots (class_0/class_1+ dirs)
+#    NOTE: Only search /content and cwd — NOT cwd.parent (which is "/" in
+#    Colab and would recurse into /proc, /sys, etc. causing OSErrors).
+print("\nSearching for HER2 dataset roots (dirs containing class_0/class_1+):")
+found_roots = []
+search_roots = [content, cwd]
+for base in search_roots:
+    if not base.exists():
+        continue
+    try:
+        for p in sorted(base.rglob("*")):
+            if p.is_dir() and p.name in ("class_0", "class_1+", "class_2+", "class_3+"):
+                root = p.parent
+                if root not in found_roots:
+                    found_roots.append(root)
+                    print(f"  ✅ Found class dir under: {root}")
+    except OSError as e:
+        print(f"  ⚠️  Skipping {base} during search: {e}")
+
+if not found_roots:
+    print("  ❌ No class_0/class_1+ directories found under /content or cwd.")
+
+# 5. Show any .zip archives (dataset may not be extracted yet)
+print("\nLooking for dataset archives (.zip):")
+for base in search_roots:
+    if not base.exists():
+        continue
+    try:
+        for p in sorted(base.rglob("*.zip")):
+            print(f"  📦 {p}  ({p.stat().st_size / 1e6:.1f} MB)")
+    except OSError as e:
+        print(f"  ⚠️  Skipping {base} during zip search: {e}")
+
+print("=" * 60)
+
+
+# ============================================================
+# Usage — Auto-Run
+# ============================================================
+
+# ------------------------------------------------------------
+# Pick the first dataset root that actually exists.
+# (If you used notebooks/train.py, the data is under:
+#   /content/HER2_Dataset/WSI-based-dataset/{train,test})
+# ------------------------------------------------------------
+
+# Confirmed dataset structure:
+#   HER2_Dataset/WSI-based-dataset/{train,test}/{class_0,class_1+,class_2+,class_3+}/*.png
+CANDIDATE_ROOTS = [
+    "/content/HER2_Dataset/WSI-based-dataset/train",
+    "/content/HER2_Dataset/WSI-based-dataset/test",
+    "/content/HER2_Dataset/WSI-based-dataset",
+    "/content/HER2_Dataset/train",
+    "./data/train",
+    "./dataset/train",
+    "./HER2_Dataset/WSI-based-dataset/train",
+]
+
+TRAIN_ROOT = next(
+    (p for p in CANDIDATE_ROOTS if Path(p).exists()),
+    None,
+)
+
+if TRAIN_ROOT is not None:
+    print(f"✅ Dataset found at: {TRAIN_ROOT}")
+    print("Running the CRITICAL batch deconvolution sanity check (20 random patches)...")
+    print("  -> H channel should show nuclei/morphology (blue)")
+    print("  -> DAB channel should show brown HER2 membrane signal")
+    visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)
+    print("\nIf the H/DAB separation looks wrong, the fixed Ruifrok stain vectors")
+    print("are miscalibrated for this dataset — fix before training.\n")
+else:
+    print("⚠️  Dataset not found in the usual locations.")
+    print("   Run notebooks/train.py first (it downloads the HER2-IHC-40x dataset),")
+    print("   or set TRAIN_ROOT manually to your dataset root and call:")
+    print("   visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)")
+
+# ------------------------------------------------------------
+# Usage — Manual (uncomment as needed)
+# ------------------------------------------------------------
+
+# --- Visualization 1: Single image deconvolution ---
+# SAMPLE_IMAGE = "/content/HER2_Dataset/WSI-based-dataset/test/class_3+/your_image.png"
+# visualize_deconvolution(SAMPLE_IMAGE)
+
+# --- Visualization 2 & 3: Gate values + Cross-attention maps ---
+# Requires a trained model. Uncomment and set paths:
+# from utils import load_checkpoint
 # model = DSCAViT(num_classes=4, pretrained=False).to(device)
-# load_checkpoint(path="...", model=model, device=device)
-# visualize_gate_values(model, SAMPLE_IMAGE)
-# visualize_cross_attention(model, SAMPLE_IMAGE)
+# load_checkpoint(path="path/to/checkpoint.pth", model=model, device=device)
+# SAMPLE = "/content/HER2_Dataset/WSI-based-dataset/test/class_3+/your_image.png"
+# visualize_gate_values(model, SAMPLE)
+# visualize_cross_attention(model, SAMPLE)
+
+# --- Alternative: dedicated deconv sanity check notebook ---
+# Use "notebooks/deconv_sanity_check.py" for a self-contained 20-patch
+# check with per-class intensity statistics.
