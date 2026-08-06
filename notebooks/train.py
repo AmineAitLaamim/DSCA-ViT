@@ -224,7 +224,7 @@ model = DSCAViT(
     pretrained=True,
     split_after=9,
     spatial_bias_beta=1.0,
-    spatial_bias_gamma=0.5,
+    spatial_bias_gamma=0.1,
     classifier_dropout=0.1,
 )
 

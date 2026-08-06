@@ -56,6 +56,8 @@ class DSCAViT(nn.Module):
         Self-correspondence bonus in the spatial bias matrix.
     spatial_bias_gamma : float
         Distance penalty scale in the spatial bias matrix.
+        Small values (e.g., 0.1) provide a soft locality prior;
+        large values (>0.3) effectively hard-mask distant tokens.
     classifier_dropout : float
         Dropout rate in the classification head.
 
@@ -78,7 +80,7 @@ class DSCAViT(nn.Module):
         split_after: int = 9,
         proj_init: str = "repeat",
         spatial_bias_beta: float = 1.0,
-        spatial_bias_gamma: float = 0.5,
+        spatial_bias_gamma: float = 0.1,
         classifier_dropout: float = 0.1,
     ) -> None:
         super().__init__()

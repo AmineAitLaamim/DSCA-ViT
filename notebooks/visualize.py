@@ -5,6 +5,8 @@
 import sys
 sys.path.insert(0, "/content/DSCA-ViT")
 
+import random
+import math
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +16,7 @@ from pathlib import Path
 
 from models.color_deconv import deconvolve_numpy
 from models import DSCAViT
-from datasets import get_test_transform
+from datasets import get_test_transform, HER2Dataset
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -66,6 +68,98 @@ def visualize_deconvolution(image_path: str) -> None:
     plt.savefig("/content/deconvolution_visualization.png", dpi=150, bbox_inches="tight")
     plt.show()
     print("Saved: /content/deconvolution_visualization.png")
+
+
+# ============================================================
+# Visualization 1b — Batch Color Deconvolution Sanity Check
+# ============================================================
+
+def visualize_deconvolution_batch(
+    root_dir: str,
+    num_samples: int = 20,
+    seed: int = 42,
+) -> None:
+    """
+    CRITICAL SANITY CHECK: Visualize color deconvolution on random patches.
+
+    This is the highest-priority validation for the DSCA-ViT architecture.
+    If the deconvolution is poor, the H stream isn't learning morphology
+    and the DAB stream isn't learning HER2 staining — the dual-stream
+    idea becomes meaningless.
+
+    For each patch, shows: Original RGB | Hematoxylin | DAB
+
+    What to look for:
+      - H channel (blue colormap): should show nuclei / morphology clearly
+      - DAB channel (brown colormap): should show brown HER2 membrane signal
+      - If DAB looks gray/noisy or H looks brown, the stain vectors are
+        miscalibrated for this dataset.
+
+    Args:
+        root_dir: Root directory containing class_0/, class_1+/,
+                  class_2+/, class_3+/ subdirectories.
+        num_samples: Number of random patches to visualize.
+        seed: Random seed for reproducibility.
+    """
+    # Collect all image paths
+    dataset = HER2Dataset(root_dir=root_dir, transform=None)
+
+    # Sample random indices (reproducible)
+    random.seed(seed)
+    n_available = len(dataset)
+    n_samples = min(num_samples, n_available)
+    indices = random.sample(range(n_available), n_samples)
+
+    # Layout: 5 images per row, each image has 3 panels (RGB, H, DAB)
+    n_cols = 5
+    n_rows = math.ceil(n_samples / n_cols)
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols * 3,
+        figsize=(n_cols * 3, n_rows * 3),
+    )
+
+    for idx, sample_idx in enumerate(indices):
+        img_path = dataset.image_paths[sample_idx]
+        class_name = dataset.classes[dataset.labels[sample_idx]]
+
+        img_rgb = load_image(str(img_path))
+        h_ch, dab_ch = deconvolve_numpy(img_rgb)
+
+        row = idx // n_cols
+        col = (idx % n_cols) * 3
+
+        # Original RGB
+        axes[row, col].imshow(img_rgb)
+        axes[row, col].set_title(f"RGB\n{class_name}", fontsize=9)
+        axes[row, col].axis("off")
+
+        # Hematoxylin
+        axes[row, col + 1].imshow(normalize_map(h_ch), cmap="Blues_r")
+        axes[row, col + 1].set_title("H", fontsize=9)
+        axes[row, col + 1].axis("off")
+
+        # DAB
+        axes[row, col + 2].imshow(normalize_map(dab_ch), cmap="YlOrBr")
+        axes[row, col + 2].set_title("DAB", fontsize=9)
+        axes[row, col + 2].axis("off")
+
+    # Hide any unused subplots (if fewer than n_rows * n_cols images)
+    for idx in range(n_samples, n_rows * n_cols):
+        row = idx // n_cols
+        col = (idx % n_cols) * 3
+        for c in range(3):
+            axes[row, col + c].axis("off")
+
+    plt.suptitle(
+        f"Color Deconvolution Sanity Check — {n_samples} Random Patches\n"
+        f"H should show nuclei/morphology | DAB should show brown HER2 signal",
+        fontsize=14,
+    )
+    plt.tight_layout()
+    plt.savefig("/content/deconvolution_batch_check.png", dpi=150, bbox_inches="tight")
+    plt.show()
+    print("Saved: /content/deconvolution_batch_check.png")
 
 
 # ============================================================
@@ -157,8 +251,9 @@ def visualize_cross_attention(model: DSCAViT, image_path: str) -> None:
     attn_hd_avg = attn_hd[0].mean(dim=0)  # (197, 197)
     attn_dh_avg = attn_dh[0].mean(dim=0)
 
-    # Select center patch (index 98 = row 7, col 7 on 14x14 grid)
-    center_idx = 98 + 1  # +1 because token 0 is CLS
+    # Select center patch (index 105 = row 7, col 7 on 14x14 grid)
+    # 7 * 14 + 7 = 105, +1 because token 0 is CLS
+    center_idx = 105 + 1  # = 106
 
     attn_from_h = attn_hd_avg[center_idx, 1:].cpu().numpy().reshape(14, 14)
     attn_from_d = attn_dh_avg[center_idx, 1:].cpu().numpy().reshape(14, 14)
@@ -202,6 +297,15 @@ SAMPLE_IMAGE = "/content/HER2_Dataset/WSI-based-dataset/test/class_3+/some_image
 
 # Visualization 1: Color deconvolution (no model needed)
 visualize_deconvolution(SAMPLE_IMAGE)
+
+# Visualization 1b: CRITICAL — Batch deconvolution sanity check (20 random patches)
+# Run this FIRST before training. Inspect the output figure:
+#   - H channel should show nuclei/morphology (blue)
+#   - DAB channel should show brown HER2 membrane signal
+# If the separation looks wrong, the fixed Ruifrok stain vectors are
+# miscalibrated for this dataset and the dual-stream premise is invalid.
+TRAIN_ROOT = "/content/HER2_Dataset/WSI-based-dataset/train"
+visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)
 
 # Load trained model for visualizations 2 and 3
 # model = DSCAViT(num_classes=4, pretrained=False).to(device)

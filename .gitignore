@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.env/
+.venv/
+env/
+venv/
+_env/
+
+# PyTorch / ML
+*.pth
+*.pt
+*.pkl
+*.h5
+checkpoints/
+lightning_logs/
+wandb/
+
+# Jupyter Notebooks (checkpoints)
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Google Colab
+/content/
+colab/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing temp files
+_test_*.py

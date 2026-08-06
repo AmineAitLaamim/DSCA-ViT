@@ -9,12 +9,19 @@ class SpatialBiasMatrix(nn.Module):
     Spatially-Biased Matrix to add inductive bias based on the physical distance 
     between patches. The CLS token has no spatial bias.
     """
-    def __init__(self, num_tokens: int = 197, gamma: float = 0.5, beta: float = 1.0):
+    def __init__(self, num_tokens: int = 197, gamma: float = 0.1, beta: float = 1.0):
         """
         Args:
             num_tokens: Total number of tokens (1 CLS + patch tokens).
             gamma: Hyperparameter for distance penalty.
             beta: Hyperparameter for self-attention bonus.
+
+        Note on gamma:
+            gamma controls the strength of the spatial locality prior.
+            Large values (>0.3) effectively mask distant tokens because the bias
+            is added before the softmax. A small value (0.1) provides a soft
+            inductive bias while still allowing the model to learn non-local
+            correspondences when useful.
         """
         super().__init__()
         self.num_tokens = num_tokens
@@ -39,6 +46,19 @@ class SpatialBiasMatrix(nn.Module):
         # since torch.zeros initializes to 0.
         
         self.bias_matrix = nn.Parameter(bias)
+
+        # ------------------------------------------------------------
+        # Print initialization values for verification
+        # ------------------------------------------------------------
+        max_dist = math.sqrt((self.grid_size - 1) ** 2 + (self.grid_size - 1) ** 2)
+        max_penalty = -gamma * max_dist
+        print("Spatial Bias Initialization")
+        print("---------------------------")
+        print(f"beta         : {beta}")
+        print(f"gamma        : {gamma}")
+        print(f"max distance : {max_dist:.2f}")
+        print(f"max penalty  : {max_penalty:.2f}")
+        print()
         
     def forward(self) -> torch.Tensor:
         """
@@ -191,7 +211,7 @@ class BidirectionalCrossAttention(nn.Module):
         num_tokens: int = 197,
         ffn_hidden_dim: int = 3072,
         dropout: float = 0.0,
-        gamma: float = 0.5,
+        gamma: float = 0.1,
         beta: float = 1.0
     ):
         """
@@ -202,6 +222,8 @@ class BidirectionalCrossAttention(nn.Module):
             ffn_hidden_dim: Hidden dimension for the FFN layers.
             dropout: Dropout probability.
             gamma: Distance penalty for spatial bias.
+                   Small values (e.g., 0.1) provide a soft locality prior;
+                   large values (>0.3) effectively hard-mask distant tokens.
             beta: Self-attention bonus for spatial bias.
         """
         super().__init__()
