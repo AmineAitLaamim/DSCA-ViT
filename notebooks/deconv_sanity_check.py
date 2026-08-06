@@ -22,11 +22,35 @@
 # ============================================================
 
 # ============================================================
+# Cell 0 — Clone / Pull Repository
+# ============================================================
+
+import subprocess
+import os
+
+REPO_URL = "https://github.com/AmineAitLaamim/DSCA-ViT.git"
+REPO_DIR = "/content/DSCA-ViT"
+
+if not os.path.exists(REPO_DIR):
+    print("Cloning repository...")
+    subprocess.run(["git", "clone", REPO_URL, REPO_DIR], check=True)
+    print("✅ Repository cloned.")
+else:
+    print("Pulling latest changes...")
+    subprocess.run(["git", "-C", REPO_DIR, "pull"], check=True)
+    print("✅ Repository updated.")
+
+# Add repository to Python path
+import sys
+sys.path.insert(0, REPO_DIR)
+
+print(f"REPO_DIR: {REPO_DIR}")
+
+
+# ============================================================
 # Cell 1 — Setup
 # ============================================================
 
-import sys
-import os
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,10 +60,6 @@ from PIL import Image
 # Mount Google Drive (for dataset access if needed)
 # from google.colab import drive
 # drive.mount("/content/drive")
-
-# Add repo to path
-REPO_DIR = "/content/DSCA-ViT"
-sys.path.insert(0, REPO_DIR)
 
 from models.color_deconv import deconvolve_numpy
 

@@ -2,8 +2,35 @@
 # Run this in Colab BEFORE starting training to verify
 # all modules are importable and produce correct tensor shapes.
 
+# ============================================================
+# Cell 0 — Clone / Pull Repository
+# ============================================================
+
+import subprocess
+import os
+
+REPO_URL = "https://github.com/AmineAitLaamim/DSCA-ViT.git"
+REPO_DIR = "/content/DSCA-ViT"
+
+if not os.path.exists(REPO_DIR):
+    print("Cloning repository...")
+    subprocess.run(["git", "clone", REPO_URL, REPO_DIR], check=True)
+    print("✅ Repository cloned.")
+else:
+    print("Pulling latest changes...")
+    subprocess.run(["git", "-C", REPO_DIR, "pull"], check=True)
+    print("✅ Repository updated.")
+
+# Add repository to Python path
 import sys
-sys.path.insert(0, "/content/DSCA-ViT")
+sys.path.insert(0, REPO_DIR)
+
+print(f"REPO_DIR: {REPO_DIR}")
+
+
+# ============================================================
+# Cell 0b — Imports
+# ============================================================
 
 import torch
 import numpy as np
