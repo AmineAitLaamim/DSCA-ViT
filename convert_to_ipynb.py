@@ -159,6 +159,11 @@ def main():
 
     py_files = [
         "train.py",
+        "train_stage2.py",
+        "gate_analysis.py",
+        "02_Cross_Attention_Analysis.py",
+        "02b_Spatial_Bias_Initialization_vs_Trained.py",
+        "03_DSCA_Ablation_Stream_and_CrossAttention.py",
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",

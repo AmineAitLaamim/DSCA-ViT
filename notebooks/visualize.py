@@ -389,45 +389,116 @@ print("=" * 60)
 
 
 # ============================================================
-# Usage — Auto-Run
+# Usage — Auto-Run (downloads dataset if missing, then visualizes)
 # ============================================================
-
-# ------------------------------------------------------------
-# Pick the first dataset root that actually exists.
-# (If you used notebooks/train.py, the data is under:
-#   /content/HER2_Dataset/WSI-based-dataset/{train,test})
-# ------------------------------------------------------------
-
+#
+# Download & extract logic mirrors model_HER2_ViT.ipynb (Cell 2),
+# which is proven to work with this dataset.
+#
 # Confirmed dataset structure:
 #   HER2_Dataset/WSI-based-dataset/{train,test}/{class_0,class_1+,class_2+,class_3+}/*.png
-CANDIDATE_ROOTS = [
-    "/content/HER2_Dataset/WSI-based-dataset/train",
-    "/content/HER2_Dataset/WSI-based-dataset/test",
-    "/content/HER2_Dataset/WSI-based-dataset",
-    "/content/HER2_Dataset/train",
-    "./data/train",
-    "./dataset/train",
-    "./HER2_Dataset/WSI-based-dataset/train",
+# ------------------------------------------------------------
+
+import zipfile
+
+DATA_ROOT = Path("/content/HER2_Dataset")
+DATA_ROOT.mkdir(exist_ok=True)
+
+ZIP_PATH = DATA_ROOT / "her2-ihc-40x-wsi.zip"
+URL = "https://zenodo.org/records/15179608/files/her2-ihc-40x-wsi.zip?download=1"
+
+# ------------------------------------------------------------
+# Download dataset (only if not already downloaded)
+# ------------------------------------------------------------
+
+if not ZIP_PATH.exists():
+    print("Downloading HER2-IHC-40x dataset...")
+    subprocess.run(["wget", "-O", str(ZIP_PATH), URL], check=True)
+else:
+    print("Dataset archive already exists.")
+
+# ------------------------------------------------------------
+# Extract main archive
+# ------------------------------------------------------------
+
+WSI_DIR = DATA_ROOT / "WSI-based-dataset"
+
+if not WSI_DIR.exists():
+    print("Extracting main archive...")
+    with zipfile.ZipFile(ZIP_PATH, "r") as z:
+        z.extractall(DATA_ROOT)
+    print("Main archive extracted.")
+else:
+    print("Main archive already extracted.")
+
+# ------------------------------------------------------------
+# Extract nested train/test archives
+# ------------------------------------------------------------
+
+nested_archives = [
+    WSI_DIR / "train_data_wsi.zip",
+    WSI_DIR / "test_data_wsi.zip",
 ]
 
-TRAIN_ROOT = next(
-    (p for p in CANDIDATE_ROOTS if Path(p).exists()),
-    None,
-)
+for archive in nested_archives:
+    extract_folder = archive.parent / archive.stem.replace("_data_wsi", "")
+    if extract_folder.exists():
+        print(f"{extract_folder.name} already extracted.")
+        continue
+    print(f"Extracting {archive.name}...")
+    with zipfile.ZipFile(archive, "r") as z:
+        z.extractall(extract_folder)
 
-if TRAIN_ROOT is not None:
-    print(f"✅ Dataset found at: {TRAIN_ROOT}")
-    print("Running the CRITICAL batch deconvolution sanity check (20 random patches)...")
-    print("  -> H channel should show nuclei/morphology (blue)")
-    print("  -> DAB channel should show brown HER2 membrane signal")
-    visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)
-    print("\nIf the H/DAB separation looks wrong, the fixed Ruifrok stain vectors")
-    print("are miscalibrated for this dataset — fix before training.\n")
-else:
-    print("⚠️  Dataset not found in the usual locations.")
-    print("   Run notebooks/train.py first (it downloads the HER2-IHC-40x dataset),")
-    print("   or set TRAIN_ROOT manually to your dataset root and call:")
-    print("   visualize_deconvolution_batch(root_dir=TRAIN_ROOT, num_samples=20, seed=42)")
+# ------------------------------------------------------------
+# Remove zip archives to save disk space
+# ------------------------------------------------------------
+
+for archive in [ZIP_PATH] + nested_archives:
+    if archive.exists():
+        archive.unlink()
+
+print("ZIP files removed.")
+
+# ------------------------------------------------------------
+# Dataset paths
+# ------------------------------------------------------------
+
+TRAIN_DIR = WSI_DIR / "train"
+TEST_DIR = WSI_DIR / "test"
+
+print("\nDataset location:")
+print(TRAIN_DIR)
+print(TEST_DIR)
+
+assert TRAIN_DIR.exists(), "Train directory not found."
+assert TEST_DIR.exists(), "Test directory not found."
+
+print("\nDataset successfully prepared!")
+
+# ------------------------------------------------------------
+# Show directory structure
+# ------------------------------------------------------------
+
+print("\nFolder structure:")
+for folder in [TRAIN_DIR, TEST_DIR]:
+    print(f"\n{folder.name}/")
+    for cls in sorted(os.listdir(folder)):
+        cls_path = folder / cls
+        if cls_path.is_dir():
+            n = len(os.listdir(cls_path))
+            print(f"   {cls:<10} {n:5d} images")
+
+# ------------------------------------------------------------
+# Run the CRITICAL batch deconvolution sanity check
+# ------------------------------------------------------------
+
+print(f"\n✅ Dataset found at: {TRAIN_DIR}")
+print("Running the CRITICAL batch deconvolution sanity check (20 random patches)...")
+print("  -> H channel should show nuclei/morphology (blue)")
+print("  -> DAB channel should show brown HER2 membrane signal")
+visualize_deconvolution_batch(root_dir=str(TRAIN_DIR), num_samples=20, seed=42)
+print("\nIf the H/DAB separation looks wrong, the fixed Ruifrok stain vectors")
+print("are miscalibrated for this dataset — fix before training.\n")
 
 # ------------------------------------------------------------
 # Usage — Manual (uncomment as needed)

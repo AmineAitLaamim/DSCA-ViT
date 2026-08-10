@@ -1,12 +1,18 @@
-# DSCA-ViT Training Notebook
-# This file is written as a Python script with cell markers.
-# Paste each section into a Google Colab cell.
+# DSCA-ViT — Stage 2 Fine-tuning (Continuation Notebook)
+# ============================================================
+# Use this notebook to continue from a completed Stage 1.
+#
+# Run Cells 1-8 (setup), then Cell 9 (Stage 2 fine-tuning).
+# Cells 10-11 are optional (save to Drive / final evaluation).
+#
+# Stage 1 is NOT trained here — the best Stage 1 checkpoint is
+# loaded from Google Drive (or the local /content fallback).
+# ============================================================
 
 # ============================================================
-# Cell 1 — Environment Setup
+# Cell 1 — Mount Google Drive
 # ============================================================
 
-# Mount Google Drive
 from google.colab import drive
 import os
 
@@ -24,7 +30,7 @@ else:
 
 import subprocess
 
-REPO_URL = "https://github.com/AmineAitLaamim/DSCA-ViT.gitck "
+REPO_URL = "https://github.com/AmineAitLaamim/DSCA-ViT.git"
 REPO_DIR = "/content/DSCA-ViT"
 
 if not os.path.exists(REPO_DIR):
@@ -88,20 +94,16 @@ print("=" * 60)
 
 
 # ============================================================
-# Cell 5 — Download & Extract Dataset
+# Cell 5 — Dataset (downloads only if missing, then extracts)
 # ============================================================
-# (Same logic as model_HER2_ViT.ipynb Cell 2 — proven to work)
+# (Same proven logic as model_HER2_ViT.ipynb Cell 2)
 
-import os
 import zipfile
-import subprocess
-from pathlib import Path
 
 DATA_ROOT = Path("/content/HER2_Dataset")
 DATA_ROOT.mkdir(exist_ok=True)
 
 ZIP_PATH = DATA_ROOT / "her2-ihc-40x-wsi.zip"
-
 URL = "https://zenodo.org/records/15179608/files/her2-ihc-40x-wsi.zip?download=1"
 
 # ------------------------------------------------------------
@@ -127,12 +129,9 @@ WSI_DIR = DATA_ROOT / "WSI-based-dataset"
 
 if not WSI_DIR.exists():
     print("Extracting main archive...")
-
     with zipfile.ZipFile(ZIP_PATH, "r") as z:
         z.extractall(DATA_ROOT)
-
     print("Main archive extracted.")
-
 else:
     print("Main archive already extracted.")
 
@@ -146,15 +145,11 @@ nested_archives = [
 ]
 
 for archive in nested_archives:
-
     extract_folder = archive.parent / archive.stem.replace("_data_wsi", "")
-
     if extract_folder.exists():
         print(f"{extract_folder.name} already extracted.")
         continue
-
     print(f"Extracting {archive.name}...")
-
     with zipfile.ZipFile(archive, "r") as z:
         z.extractall(extract_folder)
 
@@ -189,10 +184,8 @@ print("\nDataset successfully prepared!")
 # ------------------------------------------------------------
 
 print("\nFolder structure:")
-
 for folder in [TRAIN_DIR, TEST_DIR]:
     print(f"\n{folder.name}/")
-
     for cls in sorted(os.listdir(folder)):
         cls_path = folder / cls
         if cls_path.is_dir():
@@ -260,7 +253,7 @@ print(f"Val batches     : {len(val_loader)}")
 
 
 # ============================================================
-# Cell 8 — Build Model
+# Cell 8 — Build Model (same architecture as Stage 1)
 # ============================================================
 
 from models import DSCAViT
@@ -287,122 +280,20 @@ print("=" * 60)
 
 
 # ============================================================
-# Cell 9 — Stage 1: Train New Components (Encoder Frozen)
+# Cell 9 — Stage 2: Fine-tune from the Best Stage 1 Checkpoint
+# ============================================================
+# (Run this cell to continue training from a saved Stage 1)
 # ============================================================
 
-from utils import train_one_epoch, validate_one_epoch, save_checkpoint
-
-# ----------------------------------------------------------
-# Freeze shared encoder; train only new components
-# ----------------------------------------------------------
-
-for param in model.encoder.parameters():
-    param.requires_grad = False
-
-# Everything else is trainable
-param_groups = model.get_parameter_groups()
-
-optimizer = optim.Adam(
-    param_groups["new"],
-    lr=1e-4,
-)
-
-scheduler = optim.lr_scheduler.CosineAnnealingLR(
-    optimizer,
-    T_max=30,
-)
-
-criterion = nn.CrossEntropyLoss()
-
-STAGE1_EPOCHS = 30
-BEST_S1_PATH  = f"/content/best_stage1_{BACKBONE_NAME}.pth"
-
-best_acc   = 0.0
-best_epoch = 0
-
-print("=" * 60)
-print(f"Stage 1 — {BACKBONE_NAME}")
-print("Encoder: Frozen | New components: Trainable")
-print("=" * 60)
-
-for epoch in range(STAGE1_EPOCHS):
-
-    train_loss, train_acc = train_one_epoch(
-        model, train_loader, criterion, optimizer, device
-    )
-
-    val_loss, val_acc, preds, labels = validate_one_epoch(
-        model, val_loader, criterion, device
-    )
-
-    scheduler.step()
-
-    print(
-        f"Epoch [{epoch+1:02d}/{STAGE1_EPOCHS}] | "
-        f"Train Loss {train_loss:.4f} | "
-        f"Train Acc {train_acc:.2f}% | "
-        f"Val Loss {val_loss:.4f} | "
-        f"Val Acc {val_acc:.2f}%"
-    )
-
-    if val_acc > best_acc:
-        best_acc   = val_acc
-        best_epoch = epoch + 1
-
-        save_checkpoint(
-            model=model,
-            optimizer=optimizer,
-            scheduler=scheduler,
-            epoch=best_epoch,
-            val_acc=best_acc,
-            save_path=BEST_S1_PATH,
-            stage=1,
-            model_name=BACKBONE_NAME,
-            model_id=MODEL_ID,
-        )
-        print(f"  ✅ New best model saved (Epoch {best_epoch} | Val Acc: {best_acc:.2f}%)")
-
-print(f"\n{'='*60}")
-print(f"Stage 1 Finished | Best: {best_acc:.2f}% @ Epoch {best_epoch}")
-print(f"{'='*60}")
-
-
-# ============================================================
-# Cell 10 — Save Stage 1 Checkpoint to Google Drive
-# ============================================================
-
-import shutil
-from datetime import datetime
-
-SAVE_DIR_S1 = os.path.join(EXPERIMENT_DIR, "Stage1")
-os.makedirs(SAVE_DIR_S1, exist_ok=True)
-
-DEST_S1 = os.path.join(SAVE_DIR_S1, f"best_stage1_{BACKBONE_NAME}.pth")
-shutil.copy2(BEST_S1_PATH, DEST_S1)
-
-size_mb = os.path.getsize(DEST_S1) / 1024 / 1024
-print(f"✅ Stage 1 checkpoint saved to Google Drive.")
-print(f"   Path : {DEST_S1}")
-print(f"   Size : {size_mb:.2f} MB")
-
-
-# ============================================================
-# Cell 11 — Stage 2: Full Fine-tuning
-# ============================================================
-
-# Self-contained imports (Cell 9 may have been skipped)
 from utils import load_checkpoint, train_one_epoch, validate_one_epoch, save_checkpoint
-
-# Local Stage 1 checkpoint path (Cell 9 may have been skipped)
-BEST_S1_PATH = f"/content/best_stage1_{BACKBONE_NAME}.pth"
 
 # ----------------------------------------------------------
 # Locate best Stage 1 checkpoint.
-# Prefer the Google Drive copy (if Cell 10 was run),
-# otherwise fall back to the local /content checkpoint.
+# Prefer the Google Drive copy, otherwise fall back to local.
 # ----------------------------------------------------------
 
 DEST_S1 = os.path.join(EXPERIMENT_DIR, "Stage1", f"best_stage1_{BACKBONE_NAME}.pth")
+BEST_S1_PATH = f"/content/best_stage1_{BACKBONE_NAME}.pth"
 
 if not os.path.exists(DEST_S1):
     print(f"⚠️  Drive checkpoint not found at:\n    {DEST_S1}")
@@ -411,9 +302,9 @@ if not os.path.exists(DEST_S1):
 
 assert os.path.exists(DEST_S1), (
     f"Stage 1 checkpoint not found.\n"
-    f"    Checked Drive : {os.path.join(EXPERIMENT_DIR, 'Stage1', f'best_stage1_{BACKBONE_NAME}.pth')}\n"
+    f"    Checked Drive : {DEST_S1}\n"
     f"    Checked local : {BEST_S1_PATH}\n"
-    f"Run Cell 9 (Stage 1) first, or Cell 10 to copy to Drive."
+    f"Run Stage 1 training first and save the best checkpoint."
 )
 
 print(f"✅ Loading Stage 1 checkpoint:\n    {DEST_S1}")
@@ -426,7 +317,6 @@ print("✅ Stage 1 weights loaded.")
 
 # ----------------------------------------------------------
 # Read Stage 1 best accuracy/epoch from the checkpoint itself
-# (so Cell 11 works even if Cell 9 was not run in this session)
 # ----------------------------------------------------------
 
 best_acc   = checkpoint_s1.get("best_val_accuracy", 0.0)
@@ -522,8 +412,10 @@ print(f"{'='*60}")
 
 
 # ============================================================
-# Cell 12 — Save Stage 2 Checkpoint to Google Drive
+# Cell 10 — (Optional) Save Stage 2 Checkpoint to Google Drive
 # ============================================================
+
+import shutil
 
 SAVE_DIR_S2 = os.path.join(EXPERIMENT_DIR, "Stage2")
 os.makedirs(SAVE_DIR_S2, exist_ok=True)
@@ -543,19 +435,15 @@ print(f"   Size       : {size_mb:.2f} MB")
 
 
 # ============================================================
-# Cell 13 — Final Evaluation
+# Cell 11 — (Optional) Final Evaluation
 # ============================================================
 
 from utils import compute_metrics, print_metrics
 import numpy as np
 
-# ----------------------------------------------------------
-# Locate best Stage 2 checkpoint.
-# Prefer the Google Drive copy (if Cell 12 was run),
-# otherwise fall back to the local /content checkpoint.
-# ----------------------------------------------------------
-
+# Locate best Stage 2 checkpoint (Drive first, local fallback)
 DEST_S2 = os.path.join(EXPERIMENT_DIR, "Stage2", f"best_stage2_{BACKBONE_NAME}.pth")
+BEST_S2_PATH = f"/content/best_stage2_{BACKBONE_NAME}.pth"
 
 if not os.path.exists(DEST_S2):
     print(f"⚠️  Drive checkpoint not found at:\n    {DEST_S2}")
@@ -564,9 +452,9 @@ if not os.path.exists(DEST_S2):
 
 assert os.path.exists(DEST_S2), (
     f"Stage 2 checkpoint not found.\n"
-    f"    Checked Drive : {os.path.join(EXPERIMENT_DIR, 'Stage2', f'best_stage2_{BACKBONE_NAME}.pth')}\n"
+    f"    Checked Drive : {DEST_S2}\n"
     f"    Checked local : {BEST_S2_PATH}\n"
-    f"Run Cell 11 (Stage 2) first, or Cell 12 to copy to Drive."
+    f"Run Cell 9 (Stage 2) first, or Cell 10 to copy to Drive."
 )
 
 print(f"✅ Loading Stage 2 checkpoint:\n    {DEST_S2}")
