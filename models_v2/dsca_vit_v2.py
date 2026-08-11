@@ -278,8 +278,12 @@ class DSCAViTv2(nn.Module):
             fusion_modules  : interaction_d_to_h, interaction_h_to_d, gate_mlp
             classifier      : classification head
 
-        Verifies that no parameter appears twice and that every trainable
-        parameter belongs to exactly one group. Raises an error otherwise.
+        Verifies that no parameter appears twice and that EVERY model
+        parameter belongs to exactly one group — regardless of whether it
+        is currently frozen (requires_grad). Stage freezing is handled
+        separately via set_stage_requires_grad and must NOT change the
+        definition of the architectural groups.
+        Raises an error otherwise.
         """
 
         vit = list(self.encoder.parameters())
@@ -315,25 +319,35 @@ class DSCAViTv2(nn.Module):
 
         # --------------------------------------------------------
         # Parameter-group validation
+        #
+        # IMPORTANT: get_parameter_groups() must return ALL model
+        # parameters, regardless of which are currently frozen.
+        # Stage freezing is controlled separately via requires_grad
+        # (set_stage_requires_grad). We therefore validate against
+        # ALL self.parameters(), NOT only trainable ones.
         # --------------------------------------------------------
 
-        seen: set[int] = set()
+        grouped_ids: set[int] = set()
         for name, params in groups.items():
             for p in params:
                 pid = id(p)
-                if pid in seen:
+                if pid in grouped_ids:
                     raise RuntimeError(
                         f"Parameter appears in multiple groups: {name} "
                         f"(param id={pid})."
                     )
-                seen.add(pid)
+                grouped_ids.add(pid)
 
-        all_model_params = [p for p in self.parameters() if p.requires_grad]
-        if len(seen) != len(all_model_params):
+        all_ids = {id(p) for p in self.parameters()}
+
+        if grouped_ids != all_ids:
+            missing = all_ids - grouped_ids
+            extra = grouped_ids - all_ids
             raise RuntimeError(
                 "Parameter-group validation failed: "
-                f"{len(seen)} params in groups vs "
-                f"{len(all_model_params)} trainable model params."
+                f"missing={len(missing)}, extra={len(extra)}. "
+                "Every model parameter must belong to exactly one "
+                "architectural group, regardless of requires_grad."
             )
 
         return groups
