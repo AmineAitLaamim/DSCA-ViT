@@ -192,13 +192,20 @@ def set_stage_lrs(
         "classifier",
     ]
 
-    if len(optimizer.param_groups) != 5:
-        raise RuntimeError(
-            "Expected exactly 5 optimizer parameter groups, "
-            f"got {len(optimizer.param_groups)}."
-        )
+    # The optimizer may contain 5 groups (one per architecture group) or
+    # 10 groups (split into decay/no-decay per architecture group). Each
+    # param group must carry a "name" key identifying its architecture
+    # group. We match by name, not by position.
+    for param_group in optimizer.param_groups:
+        name = param_group.get("name", None)
+        if name not in group_names:
+            raise RuntimeError(
+                "Optimizer param group is missing a valid 'name' key. "
+                f"Expected one of {group_names}, got {name!r}. "
+                "When building the optimizer, add name=<group_name> to "
+                "each param group dict."
+            )
 
-    for name, param_group in zip(group_names, optimizer.param_groups):
         if name == "vit":
             lr = stage_config.get("vit_lr", 0.0 if stage < 3 else 1.0e-5)
         elif name == "existing_dsca":
@@ -209,8 +216,6 @@ def set_stage_lrs(
             lr = stage_config.get("fusion_lr", 0.0 if stage == 1 else 2.0e-4 if stage == 2 else 1.0e-4)
         elif name == "classifier":
             lr = stage_config.get("classifier_lr", 1.0e-5 if stage == 1 else 1.0e-4)
-        else:
-            raise RuntimeError(f"Unknown parameter group: {name}")
 
         param_group["lr"] = lr
         param_group["initial_lr"] = lr

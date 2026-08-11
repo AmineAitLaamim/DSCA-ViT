@@ -80,7 +80,9 @@ torch.cuda.manual_seed_all(SEED)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# Use "cuda:0" (not bare "cuda") so str(device) == 'cuda:0' matches
+# str(param.device) for GPU tensors in the device check of Cell 7.
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print("=" * 60)
 print("Environment Information")
@@ -174,7 +176,11 @@ BATCH_SIZE = CONFIG["training"]["batch_size"]
 train_transform = get_train_transform(image_size=IMAGE_SIZE)
 test_transform = get_test_transform(image_size=IMAGE_SIZE)
 
+# IMPORTANT: the validation subset must use the NON-augmented test
+# transform. Using the train transform (with augmentation) for
+# validation would corrupt the validation accuracy.
 full_train_dataset = HER2Dataset(root_dir=TRAIN_DIR, transform=train_transform)
+full_train_dataset_val = HER2Dataset(root_dir=TRAIN_DIR, transform=test_transform)
 test_dataset = HER2Dataset(root_dir=TEST_DIR, transform=test_transform)
 
 # Stratified split
@@ -187,7 +193,7 @@ train_idx, val_idx = train_test_split(
 )
 
 train_dataset = Subset(full_train_dataset, train_idx)
-val_dataset = Subset(full_train_dataset, val_idx)
+val_dataset = Subset(full_train_dataset_val, val_idx)
 
 # Save split indices
 CHECKPOINT_ROOT = CONFIG["paths"]["checkpoint_root"]
@@ -278,8 +284,11 @@ print("✅ Parameter-group validation passed (no duplicates, all assigned).")
 
 model.eval()
 
-# Small batch for shape check
-x_check = torch.randn(2, 3, IMAGE_SIZE, IMAGE_SIZE).to(device)
+# Small batch for shape check.
+# NOTE: use torch.rand (uniform [0,1]) NOT torch.randn — the color
+# deconvolution computes -log10(x + eps), which produces NaN for
+# negative inputs (randn can be negative).
+x_check = torch.rand(2, 3, IMAGE_SIZE, IMAGE_SIZE).to(device)
 
 with torch.no_grad():
     h_ch, d_ch = model.color_deconv(x_check)
@@ -339,7 +348,9 @@ for name, p in model.named_parameters():
         raise RuntimeError(f"NaN/Inf in parameter: {name}")
     if p.dtype != torch.float32:
         raise RuntimeError(f"Unexpected dtype for {name}: {p.dtype}")
-    if p.device != device:
+    # Compare as strings: torch.device('cuda') != torch.device('cuda:0')
+    # in some PyTorch versions, so use str().
+    if str(p.device) != str(device):
         raise RuntimeError(f"Unexpected device for {name}: {p.device}")
 
 print("✅ Forward/backward sanity check passed (shapes, NaN/Inf, dtype, device).")
@@ -373,11 +384,21 @@ from utils.train_v2 import (
 
 criterion = nn.CrossEntropyLoss()
 
+# Snapshot initial params of the new modules BEFORE any training,
+# so telemetry can report meaningful parameter deltas at the end.
+initial_state = snapshot_initial_params(model)
+
 # Build the single persistent optimizer with 5 groups
 groups = model.get_parameter_groups()
 
 def make_param_groups(groups, weight_decay=0.05):
-    """Weight decay on weights only; bias/norm params -> weight_decay=0."""
+    """Weight decay on weights only; bias/norm params -> weight_decay=0.
+
+    Each optimizer param group carries a "name" key identifying its
+    architecture group (vit / existing_dsca / input_modules /
+    fusion_modules / classifier). set_stage_lrs matches by name, so
+    the 10 decay/no-decay sub-groups are handled correctly.
+    """
     param_groups = []
     for name, params in groups.items():
         decay_params = []
@@ -387,8 +408,16 @@ def make_param_groups(groups, weight_decay=0.05):
                 no_decay_params.append(p)
             else:
                 decay_params.append(p)
-        param_groups.append({"params": decay_params, "weight_decay": weight_decay})
-        param_groups.append({"params": no_decay_params, "weight_decay": 0.0})
+        param_groups.append({
+            "name": name,
+            "params": decay_params,
+            "weight_decay": weight_decay,
+        })
+        param_groups.append({
+            "name": name,
+            "params": no_decay_params,
+            "weight_decay": 0.0,
+        })
     return param_groups
 
 optimizer = optim.AdamW(
@@ -681,9 +710,7 @@ print("=" * 60)
 # Cell 16 — Telemetry
 # ============================================================
 # Lightweight telemetry: confirm the new modules actually learned.
-
-# Snapshot initial params (before any training) for comparison
-initial_state = snapshot_initial_params(model)
+# Uses the `initial_state` snapshot captured in Cell 9 (before training).
 
 # Run one validation batch to collect interaction output norms + gate stats
 model.eval()
