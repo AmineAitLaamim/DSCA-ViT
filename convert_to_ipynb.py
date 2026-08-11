@@ -164,6 +164,8 @@ def main():
         "02_Cross_Attention_Analysis.py",
         "02b_Spatial_Bias_Initialization_vs_Trained.py",
         "03_DSCA_Ablation_Stream_and_CrossAttention.py",
+        "04_DSCA_Input_Distribution_and_Fusion_Gate_Diagnostic.py",
+        "05_DSCA_ViT_v2_Training.py",
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",

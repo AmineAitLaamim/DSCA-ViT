@@ -1,0 +1,56 @@
+# ============================================================
+# DSCA-ViT v2 Configuration
+# ============================================================
+
+model:
+  backbone: "vit_base_patch16_224"
+  pretrained: true
+  num_classes: 4
+  split_after: 9
+  hidden_channels: 32
+  interaction_hidden_dim: 192
+  adapter_final_scale: 0.1
+  spatial_bias_beta: 1.0
+  spatial_bias_gamma: 0.1
+  classifier_dropout: 0.1
+
+dataset:
+  name: "HER2-IHC-40x"
+  image_size: 224
+  val_fraction: 0.1
+  val_seed: 42
+
+stage1:
+  epochs: 4
+  input_lr: 2.0e-4
+  classifier_lr: 1.0e-5
+
+stage2:
+  epochs: 6
+  input_lr: 1.0e-4
+  existing_lr: 5.0e-5
+  fusion_lr: 2.0e-4
+  classifier_lr: 1.0e-4
+
+stage3:
+  epochs: 20
+  vit_lr: 1.0e-5
+  existing_lr: 5.0e-5
+  input_lr: 1.0e-4
+  fusion_lr: 1.0e-4
+  classifier_lr: 1.0e-4
+
+training:
+  batch_size: 32
+  optimizer: "AdamW"
+  weight_decay: 0.05
+  gradient_clip: 1.0
+  amp: false
+
+paths:
+  data_root: "/content/HER2_Dataset"
+  checkpoint_root: "/content/drive/MyDrive/HER2_Checkpoints"
+  experiment_name: "DSCA_ViT_v2"
+  original_checkpoint: "/content/drive/MyDrive/HER2_Checkpoints/DSCA_ViT/Stage2/weights_DSCA_ViT.pth"
+
+seed: 42
