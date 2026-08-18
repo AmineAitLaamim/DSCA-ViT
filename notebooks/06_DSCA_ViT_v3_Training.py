@@ -702,6 +702,116 @@ print(f"✅ Stage 2 checkpoint saved: {STAGE2_CKPT} (best val acc: {best_acc:.2f
 
 
 # ============================================================
+# Cell 12b — Load Best Stage 2 Checkpoint
+# ============================================================
+# Loads the Stage 2 checkpoint (stage2_end.pt) from Drive into the
+# model + optimizer + scheduler so Stage 3 can resume cleanly.
+#
+# Self-contained: works right after Cell 12, or in a fresh session
+# (rebuilds model + optimizer from CONFIG). This lets you resume
+# Stage 3 without re-running Stages 1-2 after a session interruption.
+
+# Self-contained imports (in case this cell is run in a fresh session)
+import os
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import yaml
+
+from models_v3 import DSCAViTv3
+from utils.checkpoint import load_checkpoint
+from utils.train_v3 import set_stage_requires_grad, set_stage_lrs
+
+if "REPO_DIR" not in globals():
+    REPO_DIR = "/content/DSCA-ViT"
+
+if "device" not in globals():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+# Rebuild CONFIG / paths if not already defined in this session
+if "CONFIG" not in globals():
+    with open(os.path.join(REPO_DIR, "configs", "dsca_v3_config.yaml")) as f:
+        CONFIG = yaml.safe_load(f)
+
+if "EXPERIMENT_DIR" not in globals():
+    CHECKPOINT_ROOT = CONFIG["paths"]["checkpoint_root"]
+    EXPERIMENT_DIR = os.path.join(CHECKPOINT_ROOT, CONFIG["paths"]["experiment_name"])
+
+STAGE2_CKPT = os.path.join(EXPERIMENT_DIR, "stage2_end.pt")
+
+# Rebuild model if not already defined in this session
+if "model" not in globals():
+    model = DSCAViTv3(
+        num_classes=CONFIG["model"]["num_classes"],
+        pretrained=CONFIG["model"]["pretrained"],
+        split_after=CONFIG["model"]["split_after"],
+        hidden_channels=CONFIG["model"]["hidden_channels"],
+        interaction_hidden_dim=CONFIG["model"]["interaction_hidden_dim"],
+        adapter_final_scale=CONFIG["model"]["adapter_final_scale"],
+        coarse_size=CONFIG["model"]["coarse_size"],
+        spatial_bias_beta=CONFIG["model"]["spatial_bias_beta"],
+        spatial_bias_gamma=CONFIG["model"]["spatial_bias_gamma"],
+        classifier_dropout=CONFIG["model"]["classifier_dropout"],
+    )
+    model = model.to(device)
+
+# Rebuild the persistent optimizer if not already defined in this session
+if "optimizer" not in globals():
+    groups = model.get_parameter_groups()
+
+    def make_param_groups(groups, weight_decay=0.05):
+        param_groups = []
+        for name, params in groups.items():
+            decay_params = []
+            no_decay_params = []
+            for p in params:
+                if p.ndim <= 1:  # bias / norm / scale / affine params
+                    no_decay_params.append(p)
+                else:
+                    decay_params.append(p)
+            param_groups.append({
+                "name": name,
+                "params": decay_params,
+                "weight_decay": weight_decay,
+            })
+            param_groups.append({
+                "name": name,
+                "params": no_decay_params,
+                "weight_decay": 0.0,
+            })
+        return param_groups
+
+    optimizer = optim.AdamW(
+        make_param_groups(groups, CONFIG["training"]["weight_decay"]),
+        lr=1e-4,
+    )
+
+assert os.path.exists(STAGE2_CKPT), f"Stage 2 checkpoint not found: {STAGE2_CKPT}"
+
+# Load model + optimizer + scheduler state from the Stage 2 checkpoint
+ckpt = load_checkpoint(path=STAGE2_CKPT, model=model, optimizer=optimizer, device=device)
+
+# Restore the Stage 2 freeze/LR configuration so the optimizer state
+# matches the checkpoint before Stage 3 transitions.
+set_stage_requires_grad(model, stage=2)
+set_stage_lrs(optimizer, stage=2, stage_config=CONFIG["stage2"])
+
+model.eval()
+
+best_val = ckpt.get("best_val_accuracy", "N/A")
+best_val_str = f"{best_val:.2f}%" if isinstance(best_val, (int, float)) else str(best_val)
+
+print("=" * 60)
+print("Stage 2 Checkpoint Loaded")
+print("=" * 60)
+print(f"  Checkpoint    : {STAGE2_CKPT}")
+print(f"  Stage         : {ckpt.get('stage', 'N/A')}")
+print(f"  Epoch         : {ckpt.get('epoch', 'N/A')}")
+print(f"  Best val acc  : {best_val_str}")
+print("=" * 60)
+
+
+# ============================================================
 # Cell 13 — Stage 3 (Joint Optimization)
 # ============================================================
 
