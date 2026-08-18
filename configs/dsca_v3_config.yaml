@@ -54,7 +54,10 @@ stage3:
   classifier_lr: 1.0e-4
 
 training:
-  batch_size: 32
+  # v3 runs 2 scales x 2 stains through the shared ViT per step, so
+  # activations for both scales stay alive until backward (~2x v2 memory).
+  # Reduced from 32 to 16 so v3 fits on the T4 (14.56 GiB) like v2 did.
+  batch_size: 16
   optimizer: "AdamW"
   weight_decay: 0.05
   gradient_clip: 1.0
