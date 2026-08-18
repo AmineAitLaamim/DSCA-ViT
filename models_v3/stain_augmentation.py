@@ -112,15 +112,26 @@ class StainAugmentation:
         # --------------------------------------------------------
         x = rgb * brightness  # brightness
 
+        # Brightness can push values above 1 (and never below 0 since
+        # rgb >= 0 and brightness > 0), but OD space is only defined
+        # for pixel values in (0, 1]. Clamp before the OD transform.
+        x = torch.clamp(x, min=self.epsilon, max=1.0)
+
         # Per-channel mean contrast adjustment
         mean = x.mean(dim=(1, 2), keepdim=True)
         x = (x - mean) * contrast + mean
+
+        # Contrast can push pixel values NEGATIVE (dark pixel with
+        # contrast > 1). -log10(negative) = NaN, so clamp to the
+        # valid OD range (epsilon, 1] before the OD transform.
+        x = torch.clamp(x, min=self.epsilon, max=1.0)
 
         # --------------------------------------------------------
         # Stain-space H / DAB concentration perturbation
         # --------------------------------------------------------
         # Convert to OD space: OD = -log10(I / I0), I0 = 1
-        od = -torch.log10(x + self.epsilon)  # (3, H, W)
+        # (x is guaranteed >= epsilon, so log10 is always defined)
+        od = -torch.log10(x)  # (3, H, W)
 
         # OD (H, W, 3) @ M_inv (3, 3) -> stain concentrations (H, W, 3)
         stains = od.permute(1, 2, 0) @ self.stain_matrix_inv
