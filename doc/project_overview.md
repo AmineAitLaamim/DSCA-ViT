@@ -3,6 +3,18 @@
 > **Dual-Stain Cross-Attention Vision Transformer for HER2 IHC Scoring**
 > A biologically-informed deep learning architecture that separates Hematoxylin and DAB stains and fuses them via spatially-biased cross-attention.
 
+## Version documentation
+
+This document describes the **original** architecture in `models/`. Successor experiments are documented in their own files:
+
+| Version | Package | Architecture doc | Training notebook |
+|:---|:---|:---|:---|
+| v1 (original) | `models/` | this document | `notebooks/train.py` |
+| v2 | `models_v2/` | [`doc/dsca_v2_architecture.md`](dsca_v2_architecture.md) | `notebooks/05_DSCA_ViT_v2_Training.py` |
+| v3 | `models_v3/` | [`doc/dsca_v3_architecture.md`](dsca_v3_architecture.md) | `notebooks/06_DSCA_ViT_v3_Training.py` |
+
+**Isolation rule:** each version is an independent package; `models/` and `models_v2/` are never modified by later versions.
+
 ---
 
 ## Table of Contents
@@ -712,15 +724,43 @@ DSCA-ViT/
 ├── configs/
 │   └── dsca_vit_b16.yaml      # Hyperparameters (reference — not wired in yet)
 │
+├── models_v2/                 # DSCA-ViT v2 (independent experiment)
+│   ├── dsca_vit_v2.py         # See doc/dsca_v2_architecture.md
+│   ├── input_adapters.py
+│   ├── fusion_v2.py
+│   └── ... (color_deconv.py, shared_vit.py, cross_attention.py)
+│
+├── models_v3/                 # DSCA-ViT v3 (independent experiment)
+│   ├── dsca_vit_v3.py         # See doc/dsca_v3_architecture.md
+│   ├── input_adapters_v3.py
+│   ├── multiscale_v3.py       # CoarseScaleView (zero params)
+│   ├── fusion_v3.py           # interaction, StainGate, ScaleGate
+│   ├── stain_augmentation.py  # Training-only stain-domain augmentation
+│   └── ... (color_deconv.py, shared_vit.py, cross_attention.py)
+│
 ├── notebooks/
 │   ├── train.py               # Colab training script (13 cells, 2-stage)
 │   ├── sanity_check.py        # 8 module unit tests (run before training)
 │   ├── visualize.py           # Deconv sanity check + gate/attn visualizations
-│   └── deconv_sanity_check.py # Dedicated 20-patch deconv verification
+│   ├── deconv_sanity_check.py # Dedicated 20-patch deconv verification
+│   ├── 05_DSCA_ViT_v2_Training.py  # v2 training notebook (+ .ipynb)
+│   ├── 06_DSCA_ViT_v3_Training.py  # v3 training notebook (+ .ipynb)
+│   └── 06_DSCA_ViT_v2_Evaluation.py # v2 evaluation notebook (+ .ipynb)
+│
+├── utils/
+│   ├── train_v2.py / metrics_v2.py  # v2 training/metrics
+│   └── train_v3.py / metrics_v3.py  # v3 training/metrics
+│
+├── configs/
+│   ├── dsca_vit_b16.yaml      # Original hyperparameters (reference)
+│   ├── dsca_v2_config.yaml    # v2 configuration
+│   └── dsca_v3_config.yaml    # v3 configuration
 │
 ├── doc/
 │   ├── implementation_plan.md # Architecture blueprint (v2)
 │   ├── walkthrough.md         # Implementation summary & risk analysis
+│   ├── dsca_v2_architecture.md # v2 architecture documentation
+│   ├── dsca_v3_architecture.md # v3 architecture documentation
 │   └── project_overview.md    # THIS DOCUMENT
 │
 └── convert_to_ipynb.py        # .py → .ipynb converter (cell markers)

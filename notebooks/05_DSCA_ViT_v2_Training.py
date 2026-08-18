@@ -648,6 +648,71 @@ print(f"   Last checkpoint : {LAST_CKPT}")
 
 
 # ============================================================
+# Cell 12b — Load Best Stage 3 Checkpoint
+# ============================================================
+# Loads the best Stage 3 checkpoint (selected on validation) into
+# the model for evaluation. Self-contained: works right after
+# Cell 12, or in a fresh session (rebuilds model from CONFIG).
+
+# Self-contained imports (in case this cell is run in a fresh session)
+import os
+import torch
+import yaml
+
+from models_v2 import DSCAViTv2
+from utils.checkpoint import load_checkpoint
+
+if "REPO_DIR" not in globals():
+    REPO_DIR = "/content/DSCA-ViT"
+
+if "device" not in globals():
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+# Rebuild CONFIG / paths if not already defined in this session
+if "CONFIG" not in globals():
+    with open(os.path.join(REPO_DIR, "configs", "dsca_v2_config.yaml")) as f:
+        CONFIG = yaml.safe_load(f)
+
+if "EXPERIMENT_DIR" not in globals():
+    CHECKPOINT_ROOT = CONFIG["paths"]["checkpoint_root"]
+    EXPERIMENT_DIR = os.path.join(CHECKPOINT_ROOT, CONFIG["paths"]["experiment_name"])
+
+BEST_S3_CKPT = os.path.join(EXPERIMENT_DIR, "best_stage3.pt")
+
+# Rebuild model if not already defined in this session
+if "model" not in globals():
+    model = DSCAViTv2(
+        num_classes=CONFIG["model"]["num_classes"],
+        pretrained=CONFIG["model"]["pretrained"],
+        split_after=CONFIG["model"]["split_after"],
+        hidden_channels=CONFIG["model"]["hidden_channels"],
+        interaction_hidden_dim=CONFIG["model"]["interaction_hidden_dim"],
+        adapter_final_scale=CONFIG["model"]["adapter_final_scale"],
+        spatial_bias_beta=CONFIG["model"]["spatial_bias_beta"],
+        spatial_bias_gamma=CONFIG["model"]["spatial_bias_gamma"],
+        classifier_dropout=CONFIG["model"]["classifier_dropout"],
+    )
+    model = model.to(device)
+
+assert os.path.exists(BEST_S3_CKPT), f"Best Stage 3 checkpoint not found: {BEST_S3_CKPT}"
+
+ckpt = load_checkpoint(path=BEST_S3_CKPT, model=model, device=device)
+model.eval()
+
+best_val = ckpt.get("best_val_accuracy", "N/A")
+best_val_str = f"{best_val:.2f}%" if isinstance(best_val, (int, float)) else str(best_val)
+
+print("=" * 60)
+print("Best Stage 3 Checkpoint Loaded")
+print("=" * 60)
+print(f"  Checkpoint    : {BEST_S3_CKPT}")
+print(f"  Stage         : {ckpt.get('stage', 'N/A')}")
+print(f"  Epoch         : {ckpt.get('epoch', 'N/A')}")
+print(f"  Best val acc  : {best_val_str}")
+print("=" * 60)
+
+
+# ============================================================
 # Cell 13 — Validation Metrics
 # ============================================================
 
@@ -772,7 +837,7 @@ print("=" * 60)
 # Gate/confidence correlation
 probs = torch.softmax(logits, dim=1)
 confidence = probs.max(dim=1).values.cpu().numpy()
-sample_gate = gate.mean(axis=(1, 2))  # [B]
+sample_gate = gate.mean(axis=(1, 2)).cpu().numpy()  # [B] (move to CPU for scipy)
 pearson_gc, _ = pearsonr(sample_gate, confidence)
 spearman_gc, _ = spearmanr(sample_gate, confidence)
 print("=" * 60)
