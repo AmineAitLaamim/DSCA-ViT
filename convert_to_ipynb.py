@@ -166,6 +166,8 @@ def main():
         "03_DSCA_Ablation_Stream_and_CrossAttention.py",
         "04_DSCA_Input_Distribution_and_Fusion_Gate_Diagnostic.py",
         "05_DSCA_ViT_v2_Training.py",
+        "06_DSCA_ViT_v2_Evaluation.py",
+        "06_DSCA_ViT_v3_Training.py",
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",
