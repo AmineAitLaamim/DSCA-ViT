@@ -135,7 +135,7 @@ GITHUB
 | CUDA version (A100) | `12.1.1` (confirmed via `module avail CUDA`) |
 | cuDNN (A100) | `8.9.2.26-CUDA-12.1.1` |
 | Python environment | `uv`-managed `.venv` inside the repository |
-| Environment activation | `source .venv/bin/activate` |
+| Environment invocation | `uv run python` (no manual activation needed) |
 
 ---
 
@@ -147,7 +147,6 @@ The `.venv` was created with `uv` inside the repository using `requirements.txt`
 # Already done — do not repeat unless recreating from scratch
 cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 uv venv
-source .venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
@@ -156,19 +155,23 @@ Dependencies installed (`requirements.txt`):
 - `numpy`, `scipy`, `scikit-learn`
 - `PyYAML`, `Pillow`, `matplotlib`, `seaborn`
 
-The `.venv/` directory is git-ignored and stays on the cluster. Every SLURM
-script activates it with:
-
-```bash
-source "${REPO_DIR}/.venv/bin/activate"
-```
-
-If you need to recreate the environment (e.g. after a full workspace reset):
+**How to run Python on this cluster:** `python` is not directly on PATH.
+Use `uv run python` — it automatically finds the `.venv` in the current
+directory, no activation required:
 
 ```bash
 cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
+uv run python -c "import torch; print(torch.__version__)"
+```
+
+All three SLURM scripts already use `uv run python` — no manual activation needed.
+
+If you need to recreate the environment from scratch:
+
+```bash
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
+rm -rf .venv
 uv venv
-source .venv/bin/activate
 uv pip install -r requirements.txt
 ```
 
@@ -195,12 +198,12 @@ To start a new experiment:
 
 Before submitting jobs, confirm the environment is correct:
 
-### A · Pull and activate
+### A · Pull and verify config
 
 ```bash
 cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 git pull
-source .venv/bin/activate
+uv run python -c "import yaml; p=yaml.safe_load(open('configs/dss_vit_config.yaml'))['paths']; [print(k,':',v) for k,v in p.items()]"
 ```
 
 ### B · Verify GPU visibility
@@ -222,7 +225,7 @@ Expected: same A100 GPU information, confirming SLURM can allocate a GPU.
 ### D · Verify PyTorch
 
 ```bash
-python -c "
+uv run python -c "
 import torch
 print('PyTorch:', torch.__version__)
 print('CUDA available:', torch.cuda.is_available())
@@ -258,7 +261,7 @@ Expected output:
 
 ```bash
 cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
-python -c "
+uv run python -c "
 from models_v2_1 import DSSViT
 from utils.metrics_dss_vit import compute_metrics
 from utils.split_utils import get_or_create_split_indices
@@ -292,9 +295,7 @@ If the split file already exists it is reloaded, not regenerated.
 ### Step 2 — Debug check (interactive, before full training)
 
 ```bash
-source .venv/bin/activate
-cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
-python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --debug
+uv run python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --debug
 ```
 
 `--debug` runs only 3 batches per epoch per stage. Use this to confirm the
@@ -348,7 +349,7 @@ Creates:
 sbatch slurm/train_dss_vit.slurm
 
 # Or interactively:
-python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --resume
+uv run python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --resume
 ```
 
 `--resume` loads `last.pt` and restores stage, epoch, optimizer, and scheduler.

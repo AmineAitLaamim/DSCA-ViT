@@ -37,12 +37,12 @@ mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
 # Environment — uv-managed .venv inside the repository
+# uv run picks up .venv automatically; no activation needed.
 # ------------------------------------------------------------
-source "${REPO_DIR}/.venv/bin/activate"
 
 # ------------------------------------------------------------
 # Run precompute
 # ------------------------------------------------------------
 cd "${REPO_DIR}"
 
-python scripts/precompute_stain_stats.py --config "${CONFIG}"
+uv run python scripts/precompute_stain_stats.py --config "${CONFIG}"

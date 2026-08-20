@@ -34,8 +34,8 @@ mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
 # Environment — uv-managed .venv inside the repository
+# uv run picks up .venv automatically; no activation needed.
 # ------------------------------------------------------------
-source "${REPO_DIR}/.venv/bin/activate"
 
 # ------------------------------------------------------------
 # Run training
@@ -43,10 +43,10 @@ source "${REPO_DIR}/.venv/bin/activate"
 cd "${REPO_DIR}"
 
 # Single GPU (default):
-python utils/train_dss_vit.py --config "${CONFIG}"
+uv run python utils/train_dss_vit.py --config "${CONFIG}"
 
 # Multi-GPU DDP (set --gres=gpu:N and --ntasks=N above, then uncomment):
-# srun python utils/train_dss_vit.py --config "${CONFIG}"
+# srun uv run python utils/train_dss_vit.py --config "${CONFIG}"
 
 # Resume from last checkpoint:
-# python utils/train_dss_vit.py --config "${CONFIG}" --resume
+# uv run python utils/train_dss_vit.py --config "${CONFIG}" --resume

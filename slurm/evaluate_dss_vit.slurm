@@ -34,8 +34,8 @@ mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
 # Environment — uv-managed .venv inside the repository
+# uv run picks up .venv automatically; no activation needed.
 # ------------------------------------------------------------
-source "${REPO_DIR}/.venv/bin/activate"
 
 # ------------------------------------------------------------
 # Run evaluation
@@ -43,8 +43,8 @@ source "${REPO_DIR}/.venv/bin/activate"
 cd "${REPO_DIR}"
 
 # Evaluate using best_stage3.pt (default):
-python utils/evaluate_dss_vit.py --config "${CONFIG}"
+uv run python utils/evaluate_dss_vit.py --config "${CONFIG}"
 
 # Evaluate a specific checkpoint:
-# python utils/evaluate_dss_vit.py --config "${CONFIG}" \
+# uv run python utils/evaluate_dss_vit.py --config "${CONFIG}" \
 #     --checkpoint "${WORKSPACE}/checkpoints/DSS-ViT/${EXPERIMENT}/best_stage3.pt"
