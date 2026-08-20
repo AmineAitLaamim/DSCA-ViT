@@ -496,7 +496,9 @@ def load_checkpoint(
     device: torch.device = torch.device("cpu"),
 ) -> dict:
     """Loads a checkpoint into the model (and optionally optimizer/scheduler)."""
-    checkpoint = torch.load(path, map_location=device)
+    # weights_only=False: checkpoints contain numpy arrays in the metrics
+    # dict, which PyTorch 2.6+ rejects by default (weights_only=True).
+    checkpoint = torch.load(path, map_location=device, weights_only=False)
 
     # If DDP, unwrap the model
     state_model = model.module if hasattr(model, "module") else model
@@ -708,7 +710,7 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
             logger.info(f"Resuming from '{resume_path}'")
             # Build optimizer for the stage in the checkpoint to load state
             # (we'll rebuild after loading; load state into a temp optimizer)
-            ckpt = torch.load(resume_path, map_location=device)
+            ckpt = torch.load(resume_path, map_location=device, weights_only=False)
             start_stage = ckpt.get("stage", 1)
             start_epoch = ckpt.get("epoch", 0) + 1
             best_val_acc = ckpt.get("metrics", {}).get("accuracy", 0.0)
@@ -747,7 +749,7 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
         if resume and stage == start_stage and start_epoch > 0:
             resume_path = os.path.join(checkpoint_dir, "last.pt")
             if os.path.exists(resume_path):
-                ckpt = torch.load(resume_path, map_location=device)
+                ckpt = torch.load(resume_path, map_location=device, weights_only=False)
                 if "optimizer_state_dict" in ckpt:
                     optimizer.load_state_dict(ckpt["optimizer_state_dict"])
                 if "scheduler_state_dict" in ckpt and ckpt["scheduler_state_dict"]:

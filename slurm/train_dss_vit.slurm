@@ -12,6 +12,8 @@
 # ============================================================
 
 #SBATCH --job-name=dss_vit_train
+#SBATCH --account=manapy-1wabcjwe938-default-gpu
+#SBATCH --qos=default-gpu
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1

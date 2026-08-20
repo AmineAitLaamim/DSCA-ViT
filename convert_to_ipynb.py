@@ -168,10 +168,10 @@ def main():
         "05_DSCA_ViT_v2_Training.py",
         "06_DSCA_ViT_v2_Evaluation.py",
         "06_DSCA_ViT_v3_Training.py",
+        "07_DSS_ViT_Training.py",
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",
-        "07_DSS_ViT_Training.py",
     ]
 
     print("Converting .py → .ipynb")

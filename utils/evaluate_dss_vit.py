@@ -122,7 +122,9 @@ def main() -> None:
     ).to(device)
 
     # Load checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # weights_only=False: checkpoints contain numpy arrays in the metrics
+    # dict, which PyTorch 2.6+ rejects by default (weights_only=True).
+    checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
 
