@@ -45,3 +45,24 @@ Thumbs.db
 
 # Testing temp files
 _test_*.py
+
+# ============================================================
+# DSS-ViT — Generated training artifacts (never commit these)
+# ============================================================
+
+# Metrics and structured logs
+*.jsonl
+
+# Split index and stain-stat files
+*.npz
+stain_stats.json
+
+# Plain log and SLURM output files
+*.log
+*.out
+*.err
+
+# HPC workspace directories (guard against accidental local creation)
+experiments/
+results/
+jobs/

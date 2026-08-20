@@ -5,11 +5,11 @@
 
 ## Version documentation
 
-This document describes the **original** architecture in `models/`. Successor experiments are documented in their own files:
+This overview describes the overall project motivation, the original architecture in `models/`, and the successor experiments. Each version has its own dedicated architecture doc:
 
 | Version | Package | Architecture doc | Training notebook |
 |:---|:---|:---|:---|
-| v1 (original) | `models/` | this document | `notebooks/train.py` |
+| v1 (original) | `models/` | [`doc/dsca_v1_architecture.md`](dsca_v1_architecture.md) | `notebooks/train.py` |
 | v2 | `models_v2/` | [`doc/dsca_v2_architecture.md`](dsca_v2_architecture.md) | `notebooks/05_DSCA_ViT_v2_Training.py` |
 | v3 | `models_v3/` | [`doc/dsca_v3_architecture.md`](dsca_v3_architecture.md) | `notebooks/06_DSCA_ViT_v3_Training.py` |
 
@@ -759,6 +759,7 @@ DSCA-ViT/
 ├── doc/
 │   ├── implementation_plan.md # Architecture blueprint (v2)
 │   ├── walkthrough.md         # Implementation summary & risk analysis
+│   ├── dsca_v1_architecture.md # v1 (original) architecture documentation
 │   ├── dsca_v2_architecture.md # v2 architecture documentation
 │   ├── dsca_v3_architecture.md # v3 architecture documentation
 │   └── project_overview.md    # THIS DOCUMENT

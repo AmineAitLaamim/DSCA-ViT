@@ -1,0 +1,106 @@
+# ============================================================
+# DSS-ViT Configuration
+# Dual-Stream Stain Vision Transformer for HER2 IHC
+# ============================================================
+
+# ------------------------------------------------------------
+# Model Architecture
+# ------------------------------------------------------------
+model:
+  backbone: "vit_base_patch16_224"
+  pretrained: true
+  num_classes: 4
+  num_stain_tokens: 16
+  stain_bottleneck_dim: 512
+  image_size: 224
+  classifier_dropout: 0.1
+
+# ------------------------------------------------------------
+# Dataset
+# ------------------------------------------------------------
+dataset:
+  name: "HER2-IHC-40x"
+  classes:
+    - "class_0"
+    - "class_1+"
+    - "class_2+"
+    - "class_3+"
+  image_size: 224
+  val_fraction: 0.1
+  val_seed: 42
+  # split_indices_path is under paths.split_indices_path
+
+# ------------------------------------------------------------
+# Training — Stages
+# ------------------------------------------------------------
+stage1:
+  epochs: 5
+  lr: 2.0e-4
+  freeze: ["vit"]
+
+stage2:
+  epochs: 10
+  lr: 1.0e-4
+  freeze: ["vit"]
+
+stage3:
+  epochs: 40
+  vit_lr: 1.0e-5
+  new_lr: 1.0e-4
+  freeze: []
+
+# ------------------------------------------------------------
+# Training — General
+# ------------------------------------------------------------
+training:
+  batch_size: 64            # Per GPU
+  num_workers: 8
+  optimizer: "AdamW"
+  weight_decay: 0.05
+  gradient_clip: 1.0
+  amp: true
+  label_smoothing: 0.1
+  ordinal_alpha: 0.1
+  mixup_alpha: 0.0          # 0.0 = disabled; 0.2 = enabled
+  main_metric: "accuracy"   # "accuracy" or "qwk"
+  seed: 42
+  debug: false              # Run on a few batches for quick testing
+
+# ------------------------------------------------------------
+# Paths  —  Toubkal / UM6P  (experiment: dss_vit_001)
+# ============================================================
+# All paths are absolute strings. YAML performs no interpolation.
+#
+# Workspace root:  /home/amine.aitlaamim-ext/DSCA-ViT
+# Derivation pattern:
+#   train_dir          = <workspace>/data/HER2/train
+#   test_dir           = <workspace>/data/HER2/test
+#   experiment_dir     = <workspace>/experiments/DSS-ViT/<experiment_name>
+#   checkpoint_dir     = <workspace>/checkpoints/DSS-ViT/<experiment_name>
+#   log_dir            = <workspace>/logs/DSS-ViT/<experiment_name>
+#   results_dir        = <workspace>/results/DSS-ViT/<experiment_name>
+#   stain_stats_path   = <experiment_dir>/stain_stats.json
+#   split_indices_path = <experiment_dir>/split_indices.npz
+#
+# When starting a new experiment (dss_vit_002, etc.):
+#   1. Change experiment_name and update all derived paths below.
+#   2. Update EXPERIMENT= in all three slurm/ scripts.
+#   3. Update #SBATCH --output/--error in all three slurm/ scripts
+#      (SLURM evaluates those lines before shell variables expand).
+# ============================================================
+paths:
+  experiment_name: "dss_vit_001"
+
+  # Dataset — already present on Toubkal, not in Git
+  train_dir:  "/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train"
+  test_dir:   "/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test"
+
+  # Experiment artifacts — outside the Git repository
+  experiment_dir:  "/home/amine.aitlaamim-ext/DSCA-ViT/experiments/DSS-ViT/dss_vit_001"
+  checkpoint_dir:  "/home/amine.aitlaamim-ext/DSCA-ViT/checkpoints/DSS-ViT/dss_vit_001"
+  log_dir:         "/home/amine.aitlaamim-ext/DSCA-ViT/logs/DSS-ViT/dss_vit_001"
+  results_dir:     "/home/amine.aitlaamim-ext/DSCA-ViT/results/DSS-ViT/dss_vit_001"
+
+  # Generated files — written to experiment_dir, never into the Git repo
+  stain_stats_path:    "/home/amine.aitlaamim-ext/DSCA-ViT/experiments/DSS-ViT/dss_vit_001/stain_stats.json"
+  split_indices_path:  "/home/amine.aitlaamim-ext/DSCA-ViT/experiments/DSS-ViT/dss_vit_001/split_indices.npz"

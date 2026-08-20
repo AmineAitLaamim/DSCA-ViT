@@ -171,6 +171,7 @@ def main():
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",
+        "07_DSS_ViT_Training.py",
     ]
 
     print("Converting .py → .ipynb")
