@@ -15,8 +15,9 @@
 # ============================================================
 
 #SBATCH --job-name=dss_vit_precompute
+#SBATCH --account=manapy-um6p-st-msda-1wabcjwe938-low-cpu
+#SBATCH --qos=low-cpu
 #SBATCH --partition=compute
-#SBATCH --gres=gpu:0
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
