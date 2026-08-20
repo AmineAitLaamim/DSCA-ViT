@@ -29,43 +29,45 @@ Three-stage training (5 + 10 + 40 = 55 epochs):
 ## HPC workspace layout
 
 ```
-/home/amine.aitlaamim-ext/DSCA-ViT/            ← workspace root (NOT in Git)
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/       ← workspace root (NOT in Git)
 │
 ├── code/
-│   └── DSCA-ViT/                              ← Git repository  ← git pull here
+│   └── DSCA-ViT/                                  ← Git repository  ← git pull here
 │       ├── configs/dss_vit_config.yaml
 │       ├── datasets/
 │       ├── models_v2_1/
 │       ├── utils/
 │       ├── scripts/
 │       ├── slurm/
-│       └── doc/
+│       ├── doc/
+│       ├── requirements.txt
+│       └── .venv/                                 ← uv-managed env (git-ignored)
 │
 ├── data/
-│   └── HER2/                                  ← dataset — already on Toubkal, NOT in Git
+│   └── HER2/                                      ← dataset — already on Toubkal, NOT in Git
 │       ├── train/{class_0, class_1+, class_2+, class_3+}
 │       └── test/ {class_0, class_1+, class_2+, class_3+}
 │
 ├── experiments/
 │   └── DSS-ViT/
 │       └── dss_vit_001/
-│           ├── experiment_meta.json           ← identity + config snapshot
-│           ├── split_indices.npz              ← deterministic train/val split
-│           └── stain_stats.json               ← H/DAB mean + std
+│           ├── experiment_meta.json               ← identity + config snapshot
+│           ├── split_indices.npz                  ← deterministic train/val split
+│           └── stain_stats.json                   ← H/DAB mean + std
 │
 ├── checkpoints/
 │   └── DSS-ViT/
 │       └── dss_vit_001/
 │           ├── stage1_end.pt
 │           ├── stage2_end.pt
-│           ├── best_stage3.pt                 ← used by evaluation
-│           └── last.pt                        ← used by --resume
+│           ├── best_stage3.pt                     ← used by evaluation
+│           └── last.pt                            ← used by --resume
 │
 ├── logs/
 │   └── DSS-ViT/
 │       └── dss_vit_001/
 │           ├── train.log
-│           ├── metrics.jsonl                  ← per-epoch metrics (JSON Lines)
+│           ├── metrics.jsonl
 │           ├── slurm_JOBID.out
 │           └── slurm_JOBID.err
 │
@@ -82,6 +84,7 @@ Three-stage training (5 + 10 + 40 = 55 epochs):
 
 | Pattern | Reason |
 |---------|--------|
+| `.venv/` | uv virtual environment — cluster-local |
 | `data/` | dataset |
 | `experiments/` | generated metadata |
 | `checkpoints/` | model weights |
@@ -92,8 +95,6 @@ Three-stage training (5 + 10 + 40 = 55 epochs):
 | `*.jsonl` | metrics files |
 | `*.log`, `*.out`, `*.err` | log files |
 | `stain_stats.json` | generated stain statistics |
-
-Source code, YAML configs, SLURM scripts, and documentation **are** tracked.
 
 ---
 
@@ -108,7 +109,7 @@ YOUR LOCAL PC
 GITHUB
   │  git pull
   ▼
-/home/amine.aitlaamim-ext/DSCA-ViT/code/DSCA-ViT/
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT/
   │
   ├── reads   .../data/HER2/          (existing — not from Git)
   ├── writes  .../experiments/DSS-ViT/
@@ -117,9 +118,6 @@ GITHUB
   └── writes  .../results/DSS-ViT/
 ```
 
-Never manually copy source files to the cluster.
-Never push dataset files, checkpoints, or logs to GitHub.
-
 ---
 
 ## Confirmed Toubkal information
@@ -127,49 +125,51 @@ Never push dataset files, checkpoints, or logs to GitHub.
 | Item | Value |
 |------|-------|
 | Username | `amine.aitlaamim-ext` |
-| Workspace root | `/home/amine.aitlaamim-ext/DSCA-ViT` |
+| Workspace root | `/home/amine.aitlaamim-ext/projects/DSCA-ViT` |
+| Repository path | `/home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT` |
 | GPU partition | `gpu` |
 | CPU partition | `compute` |
-| Other available partitions | `himem`, `gpu_h100` |
+| Other partitions | `himem`, `gpu_h100` |
 | GPU access | working |
-| Dataset location | `/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2` |
-
-### Items requiring on-cluster verification
-
-| Item | How to check |
-|------|-------------|
-| Available CUDA version | `module avail CUDA` |
-| Available Python version | `module avail Python` |
-| PyTorch CUDA wheel to install | must match the loaded CUDA version |
-
-> **Important:** Do not install PyTorch before checking the CUDA version on
-> Toubkal. PyTorch CUDA wheels must match the runtime CUDA configuration.
-> Use `module avail CUDA` to see available versions, then pick the matching
-> wheel from https://pytorch.org/get-started/locally/
+| Dataset location | `/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2` |
+| CUDA version (A100) | `12.1.1` (confirmed via `module avail CUDA`) |
+| cuDNN (A100) | `8.9.2.26-CUDA-12.1.1` |
+| Python environment | `uv`-managed `.venv` inside the repository |
+| Environment activation | `source .venv/bin/activate` |
 
 ---
 
-## One-time environment setup
+## Environment setup (already done)
+
+The `.venv` was created with `uv` inside the repository using `requirements.txt`:
 
 ```bash
-# 1. Check what is available on the cluster
-module avail CUDA
-module avail Python
+# Already done — do not repeat unless recreating from scratch
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
 
-# 2. Load appropriate modules (fill in the actual version numbers)
-module load CUDA/<version>
-module load Python/<version>
+Dependencies installed (`requirements.txt`):
+- `torch >= 2.0`, `torchvision >= 0.15`, `timm >= 0.9`
+- `numpy`, `scipy`, `scikit-learn`
+- `PyYAML`, `Pillow`, `matplotlib`, `seaborn`
 
-# 3. Create and activate the conda environment
-conda create -n dss_vit_env python=3.10 -y
-conda activate dss_vit_env
+The `.venv/` directory is git-ignored and stays on the cluster. Every SLURM
+script activates it with:
 
-# 4. Install PyTorch matching the loaded CUDA version
-#    Example for CUDA 12.1 — replace cuXXX with your actual version:
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+```bash
+source "${REPO_DIR}/.venv/bin/activate"
+```
 
-# 5. Install remaining dependencies
-pip install timm numpy scipy scikit-learn pyyaml pillow matplotlib
+If you need to recreate the environment (e.g. after a full workspace reset):
+
+```bash
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
 ---
@@ -191,14 +191,16 @@ To start a new experiment:
 
 ---
 
-## First-run workflow on Toubkal
+## First-run verification on Toubkal
 
-### A · Pull the repository
+Before submitting jobs, confirm the environment is correct:
+
+### A · Pull and activate
 
 ```bash
-cd /home/amine.aitlaamim-ext/DSCA-ViT/code/DSCA-ViT
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 git pull
-conda activate dss_vit_env
+source .venv/bin/activate
 ```
 
 ### B · Verify GPU visibility
@@ -207,7 +209,7 @@ conda activate dss_vit_env
 nvidia-smi
 ```
 
-Expected: one or more NVIDIA GPUs listed with memory information.
+Expected: A100 GPU listed with memory information.
 
 ### C · Verify SLURM GPU allocation
 
@@ -215,7 +217,7 @@ Expected: one or more NVIDIA GPUs listed with memory information.
 srun --partition=gpu --gres=gpu:1 --time=00:05:00 nvidia-smi
 ```
 
-Expected: same GPU information as above, confirming SLURM can allocate a GPU.
+Expected: same A100 GPU information, confirming SLURM can allocate a GPU.
 
 ### D · Verify PyTorch
 
@@ -229,33 +231,33 @@ if torch.cuda.is_available():
 "
 ```
 
-Expected: `CUDA available: True` and a GPU name.
+Expected: `CUDA available: True` and `NVIDIA A100` (or similar).
 
 ### E · Verify dataset structure
 
 ```bash
-find /home/amine.aitlaamim-ext/DSCA-ViT/data/HER2 -maxdepth 2 -type d | sort
+find /home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2 -maxdepth 2 -type d | sort
 ```
 
 Expected output:
 ```
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test/class_0
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test/class_1+
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test/class_2+
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/test/class_3+
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train/class_0
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train/class_1+
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train/class_2+
-/home/amine.aitlaamim-ext/DSCA-ViT/data/HER2/train/class_3+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test/class_0
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test/class_1+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test/class_2+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test/class_3+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train/class_0
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train/class_1+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train/class_2+
+/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train/class_3+
 ```
 
 ### F · Verify DSS-ViT imports
 
 ```bash
-cd /home/amine.aitlaamim-ext/DSCA-ViT/code/DSCA-ViT
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 python -c "
 from models_v2_1 import DSSViT
 from utils.metrics_dss_vit import compute_metrics
@@ -271,31 +273,27 @@ print('DSS-ViT imports OK')
 ### Step 1 — Precompute stain statistics (CPU job, run once per experiment)
 
 ```bash
-cd /home/amine.aitlaamim-ext/DSCA-ViT/code/DSCA-ViT
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 sbatch slurm/precompute_stain_stats.slurm
 ```
 
 Monitor:
 ```bash
 squeue -u amine.aitlaamim-ext
-```
-
-Check completion:
-```bash
 sacct -j JOBID
 ```
 
-Creates (in `experiments/DSS-ViT/dss_vit_001/`):
+Creates in `experiments/DSS-ViT/dss_vit_001/`:
 - `split_indices.npz` — deterministic stratified 90/10 train/val split (seed 42)
-- `stain_stats.json` — global H/DAB mean + std over the 90% training split
+- `stain_stats.json` — global H/DAB mean + std over the training split
 
 If the split file already exists it is reloaded, not regenerated.
 
 ### Step 2 — Debug check (interactive, before full training)
 
 ```bash
-conda activate dss_vit_env
-cd /home/amine.aitlaamim-ext/DSCA-ViT/code/DSCA-ViT
+source .venv/bin/activate
+cd /home/amine.aitlaamim-ext/projects/DSCA-ViT/code/DSCA-ViT
 python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --debug
 ```
 
@@ -309,14 +307,10 @@ full SLURM job.
 sbatch slurm/train_dss_vit.slurm
 ```
 
-Monitor output:
-```bash
-tail -f /home/amine.aitlaamim-ext/DSCA-ViT/logs/DSS-ViT/dss_vit_001/slurm_JOBID.out
-```
-
-Check queue:
+Monitor:
 ```bash
 squeue -u amine.aitlaamim-ext
+tail -f /home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/DSS-ViT/dss_vit_001/slurm_JOBID.out
 ```
 
 Training creates:
@@ -337,7 +331,7 @@ Training creates:
 sbatch slurm/evaluate_dss_vit.slurm
 ```
 
-Loads `best_stage3.pt` by default. Creates:
+Creates:
 
 | Path | Contents |
 |------|----------|
@@ -349,13 +343,11 @@ Loads `best_stage3.pt` by default. Creates:
 
 ## Resume training
 
-If a job is interrupted, resume from the last checkpoint:
-
 ```bash
-# Modify slurm/train_dss_vit.slurm to uncomment the --resume line, then:
+# Uncomment --resume in slurm/train_dss_vit.slurm, then:
 sbatch slurm/train_dss_vit.slurm
 
-# Or interactively (debug/test only):
+# Or interactively:
 python utils/train_dss_vit.py --config configs/dss_vit_config.yaml --resume
 ```
 
@@ -373,7 +365,7 @@ squeue -u amine.aitlaamim-ext
 sacct -j JOBID
 
 # Tail a running job's output
-tail -f /home/amine.aitlaamim-ext/DSCA-ViT/logs/DSS-ViT/dss_vit_001/slurm_JOBID.out
+tail -f /home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/DSS-ViT/dss_vit_001/slurm_JOBID.out
 
 # Cancel a job
 scancel JOBID
@@ -383,7 +375,7 @@ scancel JOBID
 
 ## Checkpoint reference
 
-Each `.pt` file is a `torch.save` dict containing:
+Each `.pt` file is a `torch.save` dict:
 
 ```python
 {
@@ -392,8 +384,8 @@ Each `.pt` file is a `torch.save` dict containing:
     "scheduler_state_dict": ...,
     "epoch":                int,
     "stage":                int,   # 1, 2, or 3
-    "metrics":              dict,  # val accuracy, QWK, losses at save time
-    "config":               dict,  # full config dict
+    "metrics":              dict,
+    "config":               dict,
     "split_indices_path":   str,
 }
 ```
@@ -402,21 +394,20 @@ Each `.pt` file is a `torch.save` dict containing:
 
 ## Multi-GPU DDP
 
-To train with N GPUs on a single node, edit `slurm/train_dss_vit.slurm`:
+Edit `slurm/train_dss_vit.slurm`:
 
 ```bash
 #SBATCH --gres=gpu:4
 #SBATCH --ntasks=4
 ```
 
-Replace the `python` training line with `srun`:
+Replace the `python` training line with:
 
 ```bash
 srun python utils/train_dss_vit.py --config "${CONFIG}"
 ```
 
-DDP auto-initializes from `RANK`, `WORLD_SIZE`, `LOCAL_RANK` env vars set by
-`srun`. Only rank 0 writes checkpoints, logs, and metrics.
+Only rank 0 writes checkpoints, logs, and metrics.
 
 ---
 
@@ -424,26 +415,19 @@ DDP auto-initializes from `RANK`, `WORLD_SIZE`, `LOCAL_RANK` env vars set by
 
 ```
 models_v2_1/          ← DSS-ViT model package
-  ├── dss_vit.py
-  ├── color_deconv.py
-  ├── stain_encoder.py
-  ├── ordinal_head.py
-  └── stain_stats.py
-
 utils/
-  ├── train_dss_vit.py     ← CLI training
-  ├── evaluate_dss_vit.py  ← CLI test evaluation
-  ├── metrics_dss_vit.py   ← metrics
-  └── split_utils.py       ← shared train/val split
-
+  ├── train_dss_vit.py
+  ├── evaluate_dss_vit.py
+  ├── metrics_dss_vit.py
+  └── split_utils.py
 scripts/
   └── precompute_stain_stats.py
-
 configs/
   └── dss_vit_config.yaml
-
 slurm/
   ├── train_dss_vit.slurm
   ├── evaluate_dss_vit.slurm
   └── precompute_stain_stats.slurm
+requirements.txt
+.venv/                ← uv venv (git-ignored, cluster-local)
 ```
