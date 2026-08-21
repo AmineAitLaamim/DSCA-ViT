@@ -34,7 +34,7 @@ class PlainViTB16(nn.Module):
             pretrained=pretrained,
             num_classes=num_classes,
         )
-        self.in_features = self.vit.in_features  # 768
+        self.in_features = self.vit.num_features  # 768
 
     # ------------------------------------------------------------
     # Forward
