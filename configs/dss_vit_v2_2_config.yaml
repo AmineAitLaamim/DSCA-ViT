@@ -1,0 +1,101 @@
+# ============================================================
+# DSS-ViT v2.2 Configuration
+# Dual-Stream Stain Vision Transformer for HER2 IHC
+# Strong regularization + reduced capacity
+# ============================================================
+# v2.2 changes (vs v2.1):
+#   - StainEncoder: 8 tokens, bottleneck 256 (reduced from 16/512)
+#   - Uses the retrained baseline's WSI-aware split
+#   - Stronger weight decay (0.1 new modules, 0.05 ViT)
+#   - MixUp enabled (alpha=0.2)
+#   - Reduced Stage 3 epochs (20 instead of 40)
+# ============================================================
+
+# ------------------------------------------------------------
+# Model Architecture
+# ------------------------------------------------------------
+model:
+  backbone: "vit_base_patch16_224"
+  pretrained: true
+  num_classes: 4
+  num_stain_tokens: 8          # Reduced from 16
+  stain_bottleneck_dim: 256    # Reduced from 512
+  image_size: 224
+  classifier_dropout: 0.1
+
+# ------------------------------------------------------------
+# Dataset
+# ------------------------------------------------------------
+dataset:
+  name: "HER2-IHC-40x"
+  classes:
+    - "class_0"
+    - "class_1+"
+    - "class_2+"
+    - "class_3+"
+  image_size: 224
+  val_fraction: 0.10           # WSI-aware: hold out 10% of WSIs for validation
+  val_seed: 42
+
+# ------------------------------------------------------------
+# Training — Stages
+# ------------------------------------------------------------
+stage1:
+  epochs: 5
+  lr: 2.0e-4
+  freeze: ["vit"]
+
+stage2:
+  epochs: 10
+  lr: 1.0e-4
+  freeze: ["vit"]
+
+stage3:
+  epochs: 20                   # Reduced from 40
+  vit_lr: 5.0e-6               # Reduced from 1e-5
+  new_lr: 5.0e-5               # Reduced from 1e-4
+  freeze: []
+
+# ------------------------------------------------------------
+# Training — General
+# ------------------------------------------------------------
+training:
+  batch_size: 64            # Per GPU
+  num_workers: 8
+  optimizer: "AdamW"
+  weight_decay: 0.1         # For new modules (stain_encoder, cross_fusion_gate, ordinal_head)
+  vit_weight_decay: 0.05    # For ViT backbone
+  gradient_clip: 1.0
+  amp: true
+  label_smoothing: 0.1
+  ordinal_alpha: 0.1
+  mixup_alpha: 0.2          # Enabled (0.2)
+  main_metric: "accuracy"   # "accuracy" or "qwk"
+  seed: 42
+  debug: false              # Run on a few batches for quick testing
+
+# ------------------------------------------------------------
+# Paths  —  Toubkal / UM6P  (experiment: dss_vit_v2_2_001)
+# ============================================================
+# All paths are absolute strings. YAML performs no interpolation.
+#
+# Workspace root:  /home/amine.aitlaamim-ext/projects/DSCA-ViT
+# ============================================================
+paths:
+  experiment_name: "dss_vit_v2_2_001"
+
+  # Dataset — already present on Toubkal, not in Git
+  train_dir:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train"
+  test_dir:   "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test"
+
+  # Experiment artifacts — outside the Git repository
+  experiment_dir:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/DSS-ViT-v2.2/dss_vit_v2_2_001"
+  checkpoint_dir:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/DSS-ViT-v2.2/dss_vit_v2_2_001"
+  log_dir:         "/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/DSS-ViT-v2.2/dss_vit_v2_2_001"
+  results_dir:     "/home/amine.aitlaamim-ext/projects/DSCA-ViT/results/DSS-ViT-v2.2/dss_vit_v2_2_001"
+
+  # Generated files — written to experiment_dir, never into the Git repo
+  stain_stats_path:    "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/DSS-ViT-v2.2/dss_vit_v2_2_001/stain_stats.json"
+
+  # WSI-aware split — group patches by slide, then 90/10 stratified split
+  split_indices_path:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/DSS-ViT-v2.2/dss_vit_v2_2_001/split_indices_wsi.npz"

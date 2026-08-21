@@ -40,8 +40,8 @@ from baseline import (
     HER2BaselineDataset,
     get_train_transform,
     get_test_transform,
-    get_or_create_split_indices,
 )
+from utils.split_utils_wsi import get_or_create_wsi_split_indices
 
 
 # ------------------------------------------------------------
@@ -362,9 +362,9 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
 
     val_fraction = config["dataset"]["val_fraction"]
 
-    # Always create/save the shared split_indices.npz (train/val/test)
-    # so ALL future models reuse the exact same split.
-    train_indices, val_indices = get_or_create_split_indices(
+    # Use the WSI-aware split (groups patches by slide, then 90/10 split)
+    logger.info(f"Loading WSI-aware split from '{split_indices_path}'")
+    train_indices, val_indices = get_or_create_wsi_split_indices(
         train_dir=train_dir,
         test_dir=test_dir,
         val_fraction=val_fraction,
@@ -372,20 +372,11 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
         save_path=split_indices_path,
     )
 
-    full_train_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)
-
-    if val_fraction > 0.0:
-        # Split a validation holdout from the training set
-        val_dataset = HER2BaselineDataset(root_dir=train_dir, transform=test_transform)
-        train_dataset = Subset(full_train_dataset, train_indices)
-        val_subset = Subset(val_dataset, val_indices)
-    else:
-        # val_fraction == 0.0 → validate on the official TEST set (as in the notebook)
-        train_dataset = full_train_dataset
-        val_dataset = HER2BaselineDataset(root_dir=test_dir, transform=test_transform)
-        val_subset = val_dataset
-        val_indices = np.arange(len(val_dataset))
-        logger.info("Validation on the official TEST set (val_fraction=0.0)")
+    # Both train AND val come from the TRAIN set (WSI-level stratified holdout)
+    train_set_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)
+    val_set_dataset = HER2BaselineDataset(root_dir=train_dir, transform=test_transform)
+    train_dataset = Subset(train_set_dataset, train_indices)
+    val_subset = Subset(val_set_dataset, val_indices)
 
     batch_size = config["training"]["batch_size"]
     num_workers = config["training"]["num_workers"]
@@ -496,7 +487,7 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
                     config=config, logger=logger, rank=rank, debug=debug,
                 )
 
-                class_names = full_train_dataset.get_class_names()
+                class_names = val_set_dataset.get_class_names()
                 metrics = compute_metrics(labels, preds, class_names)
                 metrics["val_loss"] = val_loss
                 metrics["train_loss"] = train_loss

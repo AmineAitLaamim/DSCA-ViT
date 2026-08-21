@@ -31,7 +31,7 @@ dataset:
     - "class_2+"
     - "class_3+"
   image_size: 224
-  val_fraction: 0.0          # 0.0 = validate on the official TEST set (as in the notebook)
+  val_fraction: 0.10         # WSI-aware: hold out 10% of WSIs for validation
   val_seed: 42
 
 # ------------------------------------------------------------
@@ -86,5 +86,5 @@ paths:
   log_dir:         "/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/ViT-Baseline/plain_vit_baseline_001"
   results_dir:     "/home/amine.aitlaamim-ext/projects/DSCA-ViT/results/ViT-Baseline/plain_vit_baseline_001"
 
-  # Generated files — written to experiment_dir, never into the Git repo
-  split_indices_path:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices.npz"
+  # WSI-aware split — group patches by slide, then 90/10 stratified split
+  split_indices_path:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
