@@ -116,11 +116,21 @@ class HER2BaselineDataset(Dataset):
 # ------------------------------------------------------------
 def get_or_create_split_indices(
     train_dir: str,
+    test_dir: Optional[str] = None,
     val_fraction: float = 0.1,
     seed: int = 42,
     save_path: str = "split_indices.npz",
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Create or load the deterministic stratified val holdout."""
+    """Create or load the deterministic stratified val holdout.
+
+    The saved .npz file contains:
+      - train_indices : indices into the TRAIN set
+      - val_indices   : indices into the TRAIN set (validation holdout)
+      - test_indices  : indices into the TEST set (if test_dir is given)
+
+    This file is the single source of truth for ALL future models so
+    every experiment uses the exact same train/val/test split.
+    """
     save_path = Path(save_path)
 
     if save_path.exists():
@@ -134,22 +144,36 @@ def get_or_create_split_indices(
     dataset = HER2BaselineDataset(root_dir=train_dir, transform=None)
     labels = np.array(dataset.labels)
 
-    train_indices, val_indices = train_test_split(
-        np.arange(len(dataset)),
-        test_size=val_fraction,
-        random_state=seed,
-        stratify=labels,
-    )
+    if val_fraction > 0.0:
+        train_indices, val_indices = train_test_split(
+            np.arange(len(dataset)),
+            test_size=val_fraction,
+            random_state=seed,
+            stratify=labels,
+        )
+    else:
+        # val_fraction == 0.0 → use the full train set for training
+        # and the official TEST set for validation (as in the notebook)
+        train_indices = np.arange(len(dataset))
+        val_indices = np.array([], dtype=np.int64)
+
+    # Test indices (into the official test set)
+    test_indices = None
+    if test_dir is not None:
+        test_dataset = HER2BaselineDataset(root_dir=test_dir, transform=None)
+        test_indices = np.arange(len(test_dataset))
 
     os.makedirs(save_path.parent, exist_ok=True)
     np.savez(
         save_path,
         train_indices=train_indices,
         val_indices=val_indices,
+        test_indices=test_indices,
         val_fraction=val_fraction,
         seed=seed,
     )
     print(f"Created and saved split indices to '{save_path}'")
-    print(f"  Train: {len(train_indices)} | Val: {len(val_indices)}")
+    print(f"  Train: {len(train_indices)} | Val: {len(val_indices)}"
+          + (f" | Test: {len(test_indices)}" if test_indices is not None else ""))
 
     return train_indices, val_indices

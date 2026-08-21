@@ -362,21 +362,25 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
 
     val_fraction = config["dataset"]["val_fraction"]
 
+    # Always create/save the shared split_indices.npz (train/val/test)
+    # so ALL future models reuse the exact same split.
+    train_indices, val_indices = get_or_create_split_indices(
+        train_dir=train_dir,
+        test_dir=test_dir,
+        val_fraction=val_fraction,
+        seed=config["dataset"]["val_seed"],
+        save_path=split_indices_path,
+    )
+
+    full_train_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)
+
     if val_fraction > 0.0:
         # Split a validation holdout from the training set
-        train_indices, val_indices = get_or_create_split_indices(
-            train_dir=train_dir,
-            val_fraction=val_fraction,
-            seed=config["dataset"]["val_seed"],
-            save_path=split_indices_path,
-        )
-        full_train_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)
         val_dataset = HER2BaselineDataset(root_dir=train_dir, transform=test_transform)
         train_dataset = Subset(full_train_dataset, train_indices)
         val_subset = Subset(val_dataset, val_indices)
     else:
         # val_fraction == 0.0 → validate on the official TEST set (as in the notebook)
-        full_train_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)
         train_dataset = full_train_dataset
         val_dataset = HER2BaselineDataset(root_dir=test_dir, transform=test_transform)
         val_subset = val_dataset
