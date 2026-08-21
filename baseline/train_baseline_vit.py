@@ -512,9 +512,14 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
                     f"QWK {metrics['qwk']:.4f} | {elapsed:.1f}s"
                 )
 
+                # Convert numpy arrays to lists for JSON serialization
+                json_metrics = {
+                    k: (v.tolist() if isinstance(v, np.ndarray) else v)
+                    for k, v in metrics.items()
+                }
                 metrics_path = os.path.join(log_dir, "metrics.jsonl")
                 with open(metrics_path, "a") as f:
-                    f.write(json.dumps(metrics) + "\n")
+                    f.write(json.dumps(json_metrics) + "\n")
 
                 checkpoint_file = "best_stage1.pt" if stage == 1 else "best_stage2.pt"
                 if val_acc > best_val_acc:
