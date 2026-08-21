@@ -2,6 +2,14 @@
 # Plain ViT-B16 Baseline Configuration
 # Reproduces the 95.02% baseline on the HER2-IHC-40x dataset
 # ============================================================
+# This config EXACTLY matches the original Colab notebook
+# (model_HER2_ViT.ipynb):
+#   - Optimizer: Adam (no weight decay)
+#   - Loss: plain CrossEntropyLoss (no label smoothing)
+#   - Batch size: 32
+#   - Validation: on the official TEST set
+#   - No AMP, no gradient clipping, no mixup
+# ============================================================
 
 # ------------------------------------------------------------
 # Model
@@ -23,7 +31,7 @@ dataset:
     - "class_2+"
     - "class_3+"
   image_size: 224
-  val_fraction: 0.1
+  val_fraction: 0.0          # 0.0 = validate on the official TEST set (as in the notebook)
   val_seed: 42
 
 # ------------------------------------------------------------
@@ -44,14 +52,14 @@ stage2:
 # Training — General
 # ------------------------------------------------------------
 training:
-  batch_size: 64            # Per GPU
+  batch_size: 32            # Matches the Colab notebook exactly
   num_workers: 8
-  optimizer: "AdamW"
-  weight_decay: 0.05
-  gradient_clip: 1.0
-  amp: true
-  label_smoothing: 0.1
-  mixup_alpha: 0.0          # 0.0 = disabled (reproduce baseline); 0.2 = enabled
+  optimizer: "Adam"         # Matches the Colab notebook (Adam, not AdamW)
+  weight_decay: 0.0         # No weight decay (as in the notebook)
+  gradient_clip: 0.0        # 0.0 = disabled (as in the notebook)
+  amp: false                # Disabled (as in the notebook)
+  label_smoothing: 0.0      # 0.0 = plain CrossEntropyLoss (as in the notebook)
+  mixup_alpha: 0.0          # 0.0 = disabled (as in the notebook)
   main_metric: "accuracy"
   seed: 42
   debug: false              # Run on a few batches
