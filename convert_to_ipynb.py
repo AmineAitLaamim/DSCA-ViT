@@ -169,6 +169,7 @@ def main():
         "06_DSCA_ViT_v2_Evaluation.py",
         "06_DSCA_ViT_v3_Training.py",
         "07_DSS_ViT_Training.py",
+        "08_DSS_ViT_Resume_Stage3.py",
         "sanity_check.py",
         "visualize.py",
         "deconv_sanity_check.py",

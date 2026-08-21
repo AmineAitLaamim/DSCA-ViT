@@ -1,0 +1,13 @@
+0000000000000000000000000000000000000000 c7b4a0a45b5dba413ffead4e67784fd10e44c385 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785258163 +0200	commit (initial): init commit
+c7b4a0a45b5dba413ffead4e67784fd10e44c385 9ce5a91ff11350013e8b7db7afc87a7399cc5ad4 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785258801 +0200	commit: add training notebook
+9ce5a91ff11350013e8b7db7afc87a7399cc5ad4 2dded8e594e61ac8b920556803ee6b6a90e0e8dc Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785261843 +0200	commit: add cloninig github repo to training notebook
+2dded8e594e61ac8b920556803ee6b6a90e0e8dc eb10f945195bbe835bab95a3aff2a5c8bf40b8a3 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785262705 +0200	commit: fix downloading dataset
+eb10f945195bbe835bab95a3aff2a5c8bf40b8a3 b61f1e5c1304847c5d2a0099c00f67878c297f61 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785264654 +0200	commit: fix downloading api
+b61f1e5c1304847c5d2a0099c00f67878c297f61 fabb36ce77d1968f13149df7d4187496d274c98d Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785266210 +0200	commit: fix extracting dataset
+fabb36ce77d1968f13149df7d4187496d274c98d 79414c291104aa88ddea3a39605058515a49420d Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785267892 +0200	commit: fix smoke test
+79414c291104aa88ddea3a39605058515a49420d 2ec42c8930c9fe76c9aa68a4d226e3f8d0ab4f7f Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785268368 +0200	commit: fix train hybrid imports
+2ec42c8930c9fe76c9aa68a4d226e3f8d0ab4f7f 3ff32418a7ac6f9d9ce5228c436af744166ed45f Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785269108 +0200	commit: change config
+3ff32418a7ac6f9d9ce5228c436af744166ed45f 8072a23de46dd57f25db2488fd371274665b1910 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785270600 +0200	pull: Fast-forward
+8072a23de46dd57f25db2488fd371274665b1910 cc2bb92ecc68ca2f4c477d1f462b44f8b494d549 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785271267 +0200	commit: add logs to the notebook
+cc2bb92ecc68ca2f4c477d1f462b44f8b494d549 10986bfeb2bc3cf917b91e56380ddfb6ff5444d8 Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785272901 +0200	commit: fix printing logs
+10986bfeb2bc3cf917b91e56380ddfb6ff5444d8 1ba83013036fda2320d2c15a9c047b01e0362def Amine Ait Laamim <amineaitlaamim16@gmail.com> 1785275883 +0200	commit: add debug msg to training

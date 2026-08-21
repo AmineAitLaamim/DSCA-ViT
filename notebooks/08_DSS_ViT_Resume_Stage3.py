@@ -1,21 +1,18 @@
-# DSS-ViT Training Notebook
+# DSS-ViT Resume Stage 3 Notebook
 # ============================================================
 # This file is written as a Python script with cell markers.
 # Paste each section into a Google Colab cell.
 #
-# Implements the DSS-ViT training pipeline:
-#   - models_v2_1/ independent implementation
-#   - RGB main stream (ImageNet-pretrained ViT-B16 via timm)
-#   - Stain auxiliary stream:
-#       ColorDeconvolution (fixed Ruifrok) -> global-normalize
-#       -> StainEncoder (CNN) -> 16 tokens [B,16,768]
-#   - Fusion: cross-attention (CLS query x stain tokens)
-#     + gated residual (gate ~ 0.5 at init)
-#   - Head: ordinal cutpoints -> 4-class probabilities
-#   - Loss: CrossEntropy + 0.1 * ordinal-BCE, label smoothing 0.1
-#   - 3-stage training (5 / 10 / 40 epochs, ViT frozen in stages 1-2)
-#   - Deterministic stratified 10% validation holdout (seed 42)
-#   - one final official-test evaluation
+# Loads the BEST Stage 3 checkpoint (best_stage3.pt) and
+# CONTINUES training Stage 3 from the recorded epoch until the
+# full 40 epochs are complete. Reuses the same training logic
+# as 07_DSS_ViT_Training.py (utils/train_dss_vit.py helpers).
+#
+#   - Loads best_stage3.pt (model + optimizer + scheduler)
+#   - Resumes the cosine LR schedule from the checkpoint epoch
+#   - Trains until STAGE3_EPOCHS (40) total epochs
+#   - Saves new best_stage3.pt / last.pt on improvement
+#   - One final official-test evaluation
 # ============================================================
 
 
@@ -95,7 +92,7 @@ torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 # Use "cuda:0" (not bare "cuda") so str(device) == 'cuda:0' matches
-# str(param.device) for GPU tensors in the device check of Cell 7.
+# str(param.device) for GPU tensors in the device check.
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print("=" * 60)
@@ -171,14 +168,19 @@ print(TEST_DIR)
 # ============================================================
 # Cell 5 — Config, Colab Paths, Split Loaders, Stain Stats
 # ============================================================
-# Loads the DSS-ViT config (single source of truth), overrides the
-# Toubkal-absolute paths with Colab-local ones, creates the
-# deterministic stratified 10% validation holdout, then computes
-# the global H/DAB stain statistics on the *training* split only
-# (needed by the model forward pass).
+# Loads the DSS-ViT config, overrides the Toubkal-absolute paths
+# with Colab-local ones, creates the deterministic stratified 10%
+# validation holdout, and loads (or recomputes) the global H/DAB
+# stain statistics.
 #
-# CRITICAL: stain stats and the split are computed on the 90%
-# training subset — never on validation/test.
+# IMPORTANT: /content/ is wiped on every fresh Colab session —
+# only Drive persists. The stain stats file created by the training
+# notebook lives in /content/DSS_ViT_experiment/, so if it is gone
+# (fresh session), we recompute it inline on the 90% train subset
+# (deterministic, same logic as the training notebook).
+#
+# CRITICAL: the split and stain stats must match the original
+# training run exactly (same seed 42, same 90% train subset).
 
 import json
 import os
@@ -191,7 +193,7 @@ import yaml
 from torch.utils.data import DataLoader, Subset
 
 from datasets import HER2Dataset, get_train_transform, get_test_transform
-from models_v2_1 import ColorDeconvolution, save_stain_stats
+from models_v2_1 import load_stain_stats
 from utils.split_utils import get_or_create_split_indices
 
 # ------------------------------------------------------------
@@ -205,8 +207,7 @@ VAL_FRACTION = CONFIG["dataset"]["val_fraction"]
 VAL_SEED = CONFIG["dataset"]["val_seed"]
 # num_workers=0 avoids the harmless "_MultiProcessingDataLoaderIter.__del__"
 # AssertionError warnings that Colab prints when a DataLoader with workers
-# is garbage-collected at cell completion. The dataset is small (~8K images),
-# so single-process loading is fast enough.
+# is garbage-collected at cell completion.
 NUM_WORKERS = 0
 
 # Batch size: config says 64 (Toubkal A100 default). A T4 has
@@ -218,7 +219,7 @@ if BATCH_SIZE >= 64:
     BATCH_SIZE = 32
 
 # ------------------------------------------------------------
-# Colab-local paths (override the absolute Toubkal paths)
+# Colab-local paths (must match the original training run)
 # ------------------------------------------------------------
 EXPERIMENT_DIR = "/content/DSS_ViT_experiment"
 CHECKPOINT_DIR = "/content/drive/MyDrive/HER2_Checkpoints/DSS-ViT"
@@ -245,7 +246,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ------------------------------------------------------------
-# Deterministic stratified split (seed 42)
+# Deterministic stratified split (seed 42) — same as training
 # ------------------------------------------------------------
 train_indices, val_indices = get_or_create_split_indices(
     train_dir=str(TRAIN_DIR),
@@ -297,69 +298,79 @@ print(f"  Test (official) : {len(test_dataset)}")
 print("=" * 60)
 
 # ------------------------------------------------------------
-# Precompute global H/DAB stain stats on the TRAIN split only
+# Load precomputed stain stats (or recompute if missing)
 # ------------------------------------------------------------
-train_stats_dataset = HER2Dataset(root_dir=str(TRAIN_DIR), transform=test_transform)
-train_stats_subset = Subset(train_stats_dataset, train_indices)
-print(f"Computing stain stats on {len(train_stats_subset)} training images...")
+from models_v2_1 import ColorDeconvolution, save_stain_stats
 
-deconv = ColorDeconvolution().to(device)
-deconv.eval()
+def _compute_stain_stats(train_dir, train_indices, image_size):
+    """Recomputes global H/DAB mean/std on the 90% train subset."""
+    stats_dataset = HER2Dataset(root_dir=train_dir, transform=get_test_transform(image_size=image_size))
+    stats_subset = Subset(stats_dataset, train_indices)
+    print(f"Recomputing stain stats on {len(stats_subset)} training images...")
 
-h_sum = 0.0
-h_sq_sum = 0.0
-dab_sum = 0.0
-dab_sq_sum = 0.0
-total_pixels = 0
+    _deconv = ColorDeconvolution().to(device)
+    _deconv.eval()
 
-stats_loader = DataLoader(
-    train_stats_subset,
-    batch_size=64,
-    shuffle=False,
-    num_workers=NUM_WORKERS,
-    pin_memory=True,
-)
+    _h_sum = 0.0
+    _h_sq_sum = 0.0
+    _dab_sum = 0.0
+    _dab_sq_sum = 0.0
+    _total_pixels = 0
 
-with torch.no_grad():
-    for images, _ in stats_loader:
-        images = images.to(device)
-        h_channel, dab_channel = deconv(images)  # (B, 1, H, W)
+    _stats_loader = DataLoader(
+        stats_subset,
+        batch_size=64,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=True,
+    )
 
-        h_flat = h_channel.flatten()
-        dab_flat = dab_channel.flatten()
+    with torch.no_grad():
+        for images, _ in _stats_loader:
+            images = images.to(device)
+            h_channel, dab_channel = _deconv(images)
 
-        h_sum += h_flat.sum().item()
-        h_sq_sum += (h_flat ** 2).sum().item()
-        dab_sum += dab_flat.sum().item()
-        dab_sq_sum += (dab_flat ** 2).sum().item()
-        total_pixels += h_flat.numel()
+            h_flat = h_channel.flatten()
+            dab_flat = dab_channel.flatten()
 
-h_mean = h_sum / total_pixels
-h_var = max(h_sq_sum / total_pixels - h_mean ** 2, 0.0)
-h_std = max(float(np.sqrt(h_var)), 1e-6)
+            _h_sum += h_flat.sum().item()
+            _h_sq_sum += (h_flat ** 2).sum().item()
+            _dab_sum += dab_flat.sum().item()
+            _dab_sq_sum += (dab_flat ** 2).sum().item()
+            _total_pixels += h_flat.numel()
 
-dab_mean = dab_sum / total_pixels
-dab_var = max(dab_sq_sum / total_pixels - dab_mean ** 2, 0.0)
-dab_std = max(float(np.sqrt(dab_var)), 1e-6)
+    _h_mean = _h_sum / _total_pixels
+    _h_var = max(_h_sq_sum / _total_pixels - _h_mean ** 2, 0.0)
+    _h_std = max(float(np.sqrt(_h_var)), 1e-6)
 
-stain_stats = {
-    "h_mean": float(h_mean),
-    "h_std": float(h_std),
-    "dab_mean": float(dab_mean),
-    "dab_std": float(dab_std),
-}
+    _dab_mean = _dab_sum / _total_pixels
+    _dab_var = max(_dab_sq_sum / _total_pixels - _dab_mean ** 2, 0.0)
+    _dab_std = max(float(np.sqrt(_dab_var)), 1e-6)
 
-save_stain_stats(
-    h_mean=h_mean,
-    h_std=h_std,
-    dab_mean=dab_mean,
-    dab_std=dab_std,
-    path=STAIN_STATS_PATH,
-)
+    return {
+        "h_mean": float(_h_mean),
+        "h_std": float(_h_std),
+        "dab_mean": float(_dab_mean),
+        "dab_std": float(_dab_std),
+    }
 
-print("=" * 60)
-print("Stain Statistics (train split only)")
-print("=" * 60)
+if os.path.exists(STAIN_STATS_PATH):
+    stain_stats = load_stain_stats(STAIN_STATS_PATH)
+    print("=" * 60)
+    print("Stain Statistics (loaded from training run)")
+    print("=" * 60)
+else:
+    print("⚠️  stain_stats.json not found in /content (fresh session).")
+    print("   Recomputed it from the 90% train subset (deterministic, seed 42).")
+    stain_stats = _compute_stain_stats(str(TRAIN_DIR), train_indices, IMAGE_SIZE)
+    save_stain_stats(
+        h_mean=stain_stats["h_mean"],
+        h_std=stain_stats["h_std"],
+        dab_mean=stain_stats["dab_mean"],
+        dab_std=stain_stats["dab_std"],
+        path=STAIN_STATS_PATH,
+    )
+
 print(f"  H mean   : {stain_stats['h_mean']:.6f}")
 print(f"  H std    : {stain_stats['h_std']:.6f}")
 print(f"  DAB mean : {stain_stats['dab_mean']:.6f}")
@@ -368,130 +379,16 @@ print("=" * 60)
 
 
 # ============================================================
-# Cell 6 — Build Model + Parameter Counts
+# Cell 6 — Build Model + Load Best Stage 3 Checkpoint
 # ============================================================
+# Builds the DSSViT model, sets Stage 3 freeze/LR config, builds
+# the Stage 3 optimizer + cosine scheduler, then loads the BEST
+# Stage 3 checkpoint (model + optimizer + scheduler state).
+#
+# The scheduler state is restored so the cosine LR schedule
+# continues from the checkpoint epoch, not from epoch 0.
 
 from models_v2_1 import DSSViT
-
-model = DSSViT(
-    num_classes=CONFIG["model"]["num_classes"],
-    pretrained=CONFIG["model"]["pretrained"],
-    num_stain_tokens=CONFIG["model"]["num_stain_tokens"],
-    stain_bottleneck_dim=CONFIG["model"]["stain_bottleneck_dim"],
-    stain_stats=stain_stats,
-    image_size=CONFIG["model"]["image_size"],
-)
-model = model.to(device)
-
-counts = model.count_parameters()
-print("=" * 60)
-print("DSS-ViT Parameter Summary")
-print("=" * 60)
-for name, count in counts.items():
-    print(f"  {name:<20} : {count:>12,}")
-print("=" * 60)
-
-# Verify the 4 parameter groups (used for staged training)
-groups = model.get_parameter_groups()
-print("Parameter groups (4):")
-for name, params in groups.items():
-    n_params = sum(p.numel() for p in params)
-    print(f"  {name:<20} : {len(params):>5} tensors, {n_params:>12,} params")
-print("✅ Parameter-group validation passed (vit / stain_encoder / "
-      "cross_fusion_gate / ordinal_head).")
-
-
-# ============================================================
-# Cell 7 — Forward / Shape / Backward Sanity Check
-# ============================================================
-# NOTE: use torch.rand (uniform [0,1]) NOT torch.randn — the color
-# deconvolution computes -log10(x + eps), which produces NaN for
-# negative inputs.
-
-from models_v2_1 import total_loss as _total_loss
-
-model.eval()
-
-x_check = torch.rand(2, 3, IMAGE_SIZE, IMAGE_SIZE).to(device)
-
-with torch.no_grad():
-    h_channel, dab_channel = model.color_deconv(x_check)
-    print(f"Input RGB        : {tuple(x_check.shape)}")
-    print(f"H                : {tuple(h_channel.shape)}")
-    print(f"DAB              : {tuple(dab_channel.shape)}")
-
-    h_norm = (h_channel - model.h_mean) / model.h_std
-    d_norm = (dab_channel - model.dab_mean) / model.dab_std
-    stain_input = torch.cat([h_norm, d_norm], dim=1)
-    print(f"Stain input      : {tuple(stain_input.shape)}")
-
-    stain_tokens = model.stain_encoder(stain_input)
-    print(f"Stain tokens     : {tuple(stain_tokens.shape)}")
-
-    rgb_norm = (x_check - model.imagenet_mean) / model.imagenet_std
-    features = model.vit.forward_features(rgb_norm)
-    print(f"ViT features     : {tuple(features.shape)}")
-
-    x_cls = features[:, 0]
-    x_patch = features[:, 1:]
-    print(f"ViT CLS          : {tuple(x_cls.shape)}")
-    print(f"ViT patches      : {tuple(x_patch.shape)}")
-
-    attn_out, _ = model.cross_attn(
-        query=x_cls.unsqueeze(1),
-        key=stain_tokens,
-        value=stain_tokens,
-    )
-    attn_out = attn_out.squeeze(1)
-    concat = torch.cat([x_cls, attn_out], dim=-1)
-    gate = torch.sigmoid(model.gate_mlp(concat))
-    fused_cls = x_cls + gate * attn_out
-    logits = model.ordinal_head(fused_cls)
-    print(f"Attn out         : {tuple(attn_out.shape)}")
-    print(f"Gate             : {tuple(gate.shape)}")
-    print(f"Fused CLS        : {tuple(fused_cls.shape)}")
-    print(f"Cutpoint logits  : {tuple(logits.shape)}")
-
-    # Full forward
-    pred = model(x_check)
-    print(f"Full probs       : {tuple(pred['probs'].shape)}")
-    print(f"mean_gate (init) : {pred['mean_gate'].item():.4f}  (expect ~0.5)")
-
-# Backward check
-model.train()
-x_back = x_check.clone().requires_grad_(True)
-pred = model(x_back)
-labels = torch.randint(0, 4, (2,)).to(device)
-loss, ce_loss, ord_loss = _total_loss(
-    pred["logits"],
-    labels,
-    pred["probs"],
-    alpha=CONFIG["training"]["ordinal_alpha"],
-    label_smoothing=CONFIG["training"]["label_smoothing"],
-)
-loss.backward()
-print(f"loss.backward()  : OK (total={loss.item():.4f}, "
-      f"CE={ce_loss.item():.4f}, Ord={ord_loss.item():.4f})")
-
-# NaN / Inf / dtype / device checks
-for name, p in model.named_parameters():
-    if torch.isnan(p).any() or torch.isinf(p).any():
-        raise RuntimeError(f"NaN/Inf in parameter: {name}")
-    if p.dtype != torch.float32:
-        raise RuntimeError(f"Unexpected dtype for {name}: {p.dtype}")
-    if str(p.device) != str(device):
-        raise RuntimeError(f"Unexpected device for {name}: {p.device}")
-
-print("✅ Forward/backward sanity check passed (shapes, NaN/Inf, dtype, device).")
-
-
-# ============================================================
-# Cell 8 — Smoke Test
-# ============================================================
-# Short training smoke test (1-2 batches) before the full run.
-# Imports the training/validation loops from utils/train_dss_vit.py
-# so the notebook reuses the HPC-tested training logic.
-
 from utils.train_dss_vit import (
     setup_logging,
     build_optimizer,
@@ -503,6 +400,10 @@ from utils.train_dss_vit import (
 )
 from utils.metrics_dss_vit import compute_metrics, print_metrics
 
+STAGE3_EPOCHS = CONFIG["stage3"]["epochs"]
+BEST_S3_CKPT = os.path.join(CHECKPOINT_DIR, "best_stage3.pt")
+LAST_CKPT = os.path.join(CHECKPOINT_DIR, "last.pt")
+
 logger = setup_logging(LOG_DIR, rank=0)
 logger.info(f"Device: {device}")
 
@@ -511,329 +412,65 @@ use_amp = CONFIG["training"].get("amp", True) and torch.cuda.is_available()
 scaler = torch.amp.GradScaler("cuda", enabled=use_amp) if use_amp else None
 logger.info(f"AMP (mixed precision): {'enabled' if use_amp else 'disabled'}")
 
-# Stage 1 freeze configuration
-set_stage_requires_grad(model, stage=1, config=CONFIG)
-optimizer = build_optimizer(model, CONFIG, stage=1)
+# Build model
+model = DSSViT(
+    num_classes=CONFIG["model"]["num_classes"],
+    pretrained=CONFIG["model"]["pretrained"],
+    num_stain_tokens=CONFIG["model"]["num_stain_tokens"],
+    stain_bottleneck_dim=CONFIG["model"]["stain_bottleneck_dim"],
+    stain_stats=stain_stats,
+    image_size=CONFIG["model"]["image_size"],
+).to(device)
 
-smoke_loader = DataLoader(
-    train_dataset,
-    batch_size=BATCH_SIZE,
-    shuffle=True,
-    num_workers=NUM_WORKERS,
-    pin_memory=True,
-)
-
-for i, (images, labels) in enumerate(smoke_loader):
-    if i >= 1:
-        break
-    images = images.to(device, non_blocking=True)
-    labels = labels.to(device, non_blocking=True)
-
-    optimizer.zero_grad(set_to_none=True)
-
-    with torch.amp.autocast(device_type="cuda", enabled=scaler is not None):
-        pred = model(images)
-        smoke_loss, _, _ = _total_loss(
-            pred["logits"],
-            labels,
-            pred["probs"],
-            alpha=CONFIG["training"]["ordinal_alpha"],
-            label_smoothing=CONFIG["training"]["label_smoothing"],
-        )
-
-    if scaler is not None:
-        scaler.scale(smoke_loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-    else:
-        smoke_loss.backward()
-        optimizer.step()
-
-    print(f"Smoke test batch: loss={smoke_loss.item():.4f}")
-
-print("✅ Smoke test passed.")
-
-
-# ============================================================
-# Cell 9 — Stage 1 (Stain + Fusion Adaptation, ViT frozen)
-# ============================================================
-
-STAGE1_EPOCHS = CONFIG["stage1"]["epochs"]
-STAGE1_CKPT = os.path.join(CHECKPOINT_DIR, "stage1_end.pt")
-
-# New-module-only LR 2e-4, ViT frozen
-set_stage_requires_grad(model, stage=1, config=CONFIG)
-optimizer = build_optimizer(model, CONFIG, stage=1)
-scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=STAGE1_EPOCHS)
-
-best_acc = 0.0
-best_metrics = {}
-
-print("=" * 60)
-print("Stage 1 — Stain + Fusion Adaptation")
-print(f"  new modules lr : {CONFIG['stage1']['lr']}")
-print(f"  vit            : frozen")
-print(f"  epochs         : {STAGE1_EPOCHS}")
-print("=" * 60)
-
-for epoch in range(STAGE1_EPOCHS):
-    train_total, train_ce, train_ord_loss, train_acc = train_one_epoch(
-        model=model,
-        dataloader=train_loader,
-        optimizer=optimizer,
-        scaler=scaler,
-        device=device,
-        config=CONFIG,
-        epoch=epoch,
-        logger=logger,
-        rank=0,
-        debug=CONFIG["training"]["debug"],
-    )
-
-    scheduler.step()
-
-    val_total, val_ce, val_ord_loss, val_acc, preds, labels = validate_one_epoch(
-        model=model,
-        dataloader=val_loader,
-        device=device,
-        config=CONFIG,
-        logger=logger,
-        rank=0,
-        debug=CONFIG["training"]["debug"],
-    )
-
-    metrics = compute_metrics(labels, preds, full_train_dataset.get_class_names())
-    metrics.update({
-        "val_total_loss": val_total,
-        "val_ce_loss": val_ce,
-        "val_ord_loss": val_ord_loss,
-        "train_total_loss": train_total,
-        "train_ce_loss": train_ce,
-        "train_ord_loss": train_ord_loss,
-        "train_acc": train_acc,
-        "epoch": epoch + 1,
-        "stage": 1,
-    })
-
-    print(
-        f"Stage 1 | Epoch [{epoch+1:02d}/{STAGE1_EPOCHS}] | "
-        f"Train Loss {train_total:.4f} (CE {train_ce:.4f}, Ord {train_ord_loss:.4f}) | "
-        f"Train Acc {train_acc:.2f}% | "
-        f"Val Loss {val_total:.4f} | Val Acc {val_acc:.2f}% | "
-        f"QWK {metrics['qwk']:.4f}"
-    )
-
-    if val_acc > best_acc:
-        best_acc = val_acc
-        best_metrics = metrics
-
-save_checkpoint(
-    model=model,
-    optimizer=optimizer,
-    scheduler=scheduler,
-    epoch=STAGE1_EPOCHS,
-    stage=1,
-    metrics=best_metrics,
-    config=CONFIG,
-    split_indices_path=SPLIT_INDICES_PATH,
-    save_path=STAGE1_CKPT,
-    rank=0,
-)
-print(f"✅ Stage 1 checkpoint saved: {STAGE1_CKPT} (best val acc: {best_acc:.2f}%)")
-
-
-# ============================================================
-# Cell 10 — Stage 2 (Stain + Fusion Adaptation, ViT frozen)
-# ============================================================
-
-STAGE2_EPOCHS = CONFIG["stage2"]["epochs"]
-STAGE2_CKPT = os.path.join(CHECKPOINT_DIR, "stage2_end.pt")
-
-set_stage_requires_grad(model, stage=2, config=CONFIG)
-optimizer = build_optimizer(model, CONFIG, stage=2)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=STAGE2_EPOCHS)
-
-best_acc = 0.0
-best_metrics = {}
-
-print("=" * 60)
-print("Stage 2 — Stain + Fusion Adaptation (ViT frozen)")
-print(f"  LR modules lr : {CONFIG['stage2']['lr']}")
-print(f"  vit          : frozen")
-print(f"  epochs       : {STAGE2_EPOCHS}")
-print("=" * 60)
-
-for epoch in range(STAGE2_EPOCHS):
-    train_total, train_ce, train_ord_loss, train_acc = train_one_epoch(
-        model=model,
-        dataloader=train_loader,
-        optimizer=optimizer,
-        scaler=scaler,
-        device=device,
-        config=CONFIG,
-        epoch=epoch,
-        logger=logger,
-        rank=0,
-        debug=CONFIG["training"]["debug"],
-    )
-
-    scheduler.step()
-
-    val_total, val_ce, val_ord_loss, val_acc, val_preds, val_labels = validate_one_epoch(
-        model=model,
-        dataloader=val_loader,
-        device=device,
-        config=CONFIG,
-        logger=logger,
-        rank=0,
-        debug=CONFIG["training"]["debug"],
-    )
-
-    metrics = compute_metrics(val_labels, val_preds, full_train_dataset.get_class_names())
-    metrics.update({
-        "val_total_loss": val_total,
-        "val_ce_loss": val_ce,
-        "val_ord_loss": val_ord_loss,
-        "train_total_loss": train_total,
-        "train_ce_loss": train_ce,
-        "train_ord_loss": train_ord_loss,
-        "train_acc": train_acc,
-        "epoch": epoch + 1,
-        "stage": 2,
-    })
-
-    print(
-        f"Stage 2 | Epoch [{epoch+1:02d}/{STAGE2_EPOCHS}] | "
-        f"Train Loss {train_total:.4f} (CE {train_ce:.4f}, Ord {train_ord_loss:.4f}) | "
-        f"Train Acc {train_acc:.2f}% | "
-        f"Val Loss {val_total:.4f} | Val Acc {val_acc:.2f}% | "
-        f"QWK {metrics['qwk']:.4f}"
-    )
-
-    if val_acc > best_acc:
-        best_acc = val_acc
-        best_metrics = metrics
-
-save_checkpoint(
-    model=model,
-    optimizer=optimizer,
-    scheduler=scheduler,
-    epoch=STAGE2_EPOCHS,
-    stage=2,
-    metrics=best_metrics,
-    config=CONFIG,
-    split_indices_path=SPLIT_INDICES_PATH,
-    save_path=STAGE2_CKPT,
-    rank=0,
-)
-print(f"✅ Stage 2 checkpoint saved: {STAGE2_CKPT} (best val acc: {best_acc:.2f}%)")
-
-
-# ============================================================
-# Cell 11 — Load Best Stage 2 Checkpoint
-# ============================================================
-# Loads the Stage 2 checkpoint into the model + optimizer so
-# Stage 3 can resume cleanly.
-#
-# Self-contained: works right after Cell 10, or in a fresh session
-# (rebuilds model + optimizer from CONFIG + stain_stats.json).
-
-# Self-contained imports (in case this cell is run in a fresh session)
-import os
-import sys
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import yaml
-
-from models_v2_1 import DSSViT, load_stain_stats
-from utils.train_dss_vit import (
-    build_optimizer,
-    set_stage_requires_grad,
-    load_checkpoint,
-)
-
-if "REPO_DIR" not in globals():
-    REPO_DIR = "/content/DSCA-ViT"
-if "device" not in globals():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-sys.path.insert(0, REPO_DIR)
-
-# Rebuild CONFIG / paths if not already defined in this session
-if "CONFIG" not in globals():
-    with open(os.path.join(REPO_DIR, "configs", "dss_vit_config.yaml")) as f:
-        CONFIG = yaml.safe_load(f)
-    EXPERIMENT_DIR = "/content/DSS_ViT_experiment"
-    CHECKPOINT_DIR = "/content/drive/MyDrive/HER2_Checkpoints/DSS-ViT"
-    STAIN_STATS_PATH = os.path.join(EXPERIMENT_DIR, "stain_stats.json")
-
-STAGE2_CKPT = os.path.join(CHECKPOINT_DIR, "stage2_end.pt")
-
-# Rebuild model if not already defined in this session
-if "model" not in globals():
-    stain_stats = load_stain_stats(STAIN_STATS_PATH)
-    model = DSSViT(
-        num_classes=CONFIG["model"]["num_classes"],
-        pretrained=CONFIG["model"]["pretrained"],
-        num_stain_tokens=CONFIG["model"]["num_stain_tokens"],
-        stain_bottleneck_dim=CONFIG["model"]["stain_bottleneck_dim"],
-        stain_stats=stain_stats,
-        image_size=CONFIG["model"]["image_size"],
-    ).to(device)
-
-# Build optimizer for the stage-2 configuration to load state
-set_stage_requires_grad(model, stage=2, config=CONFIG)
-optimizer = build_optimizer(model, CONFIG, stage=2)
-
-assert os.path.exists(STAGE2_CKPT), f"Stage 2 checkpoint not found: {STAGE2_CKPT}"
-
-ckpt = load_checkpoint(
-    path=STAGE2_CKPT,
-    model=model,
-    optimizer=optimizer,
-    device=device,
-)
-model.eval()
-
-best_val = ckpt.get("metrics", {}).get("accuracy", "N/A")
-if isinstance(best_val, (int, float)):
-    best_val_str = f"{best_val:.4f}"
-else:
-    best_val_str = str(best_val)
-
-print("=" * 60)
-print("Stage 2 Checkpoint Loaded")
-print("=" * 60)
-print(f"  Checkpoint    : {STAGE2_CKPT}")
-print(f"  Stage         : {ckpt.get('stage', 'N/A')}")
-print(f"  Epoch         : {ckpt.get('epoch', 'N/A')}")
-print(f"  Best val acc  : {best_val_str}")
-print("=" * 60)
-
-
-# ============================================================
-# Cell 12 — Stage 3 (Joint Optimization, ViT unfrozen)
-# ============================================================
-
-STAGE3_EPOCHS = CONFIG["stage3"]["epochs"]
-BEST_S3_CKPT = os.path.join(CHECKPOINT_DIR, "best_stage3.pt")
-LAST_CKPT = os.path.join(CHECKPOINT_DIR, "last.pt")
-
+# Stage 3 freeze/LR config
 set_stage_requires_grad(model, stage=3, config=CONFIG)
 optimizer = build_optimizer(model, CONFIG, stage=3)
 scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=STAGE3_EPOCHS)
 
-best_acc = 0.0
-best_metrics = {}
+assert os.path.exists(BEST_S3_CKPT), f"Best Stage 3 checkpoint not found: {BEST_S3_CKPT}"
+
+# Load model + optimizer + scheduler state from best_stage3.pt
+ckpt = load_checkpoint(
+    path=BEST_S3_CKPT,
+    model=model,
+    optimizer=optimizer,
+    scheduler=scheduler,
+    device=device,
+)
+model.eval()
+
+# Resume state: number of completed epochs + best val acc so far
+start_epoch = ckpt.get("epoch", 0)  # 1-based count of completed epochs
+best_acc = ckpt.get("metrics", {}).get("accuracy", 0.0) * 100  # fraction -> %
+best_metrics = ckpt.get("metrics", {})
 
 print("=" * 60)
-print("Stage 3 — Joint Optimization (ViT unfrozen)")
+print("Best Stage 3 Checkpoint Loaded (resume)")
+print("=" * 60)
+print(f"  Checkpoint    : {BEST_S3_CKPT}")
+print(f"  Stage         : {ckpt.get('stage', 'N/A')}")
+print(f"  Completed epochs : {start_epoch} / {STAGE3_EPOCHS}")
+print(f"  Best val acc  : {best_acc:.2f}%")
+print(f"  Resuming from epoch {start_epoch} to {STAGE3_EPOCHS}")
+print("=" * 60)
+
+
+# ============================================================
+# Cell 7 — Continue Stage 3 Training
+# ============================================================
+# Continues Stage 3 from the checkpoint epoch until the full
+# STAGE3_EPOCHS (40) are complete. The cosine scheduler resumes
+# from the restored state. New best models overwrite
+# best_stage3.pt; the latest state is saved to last.pt.
+
+print("=" * 60)
+print("Stage 3 — Continue (Joint Optimization, ViT unfrozen)")
 print(f"  vit new_lr : {CONFIG['stage3']['vit_lr']}")
 print(f"  new lr     : {CONFIG['stage3']['new_lr']}")
-print(f"  epochs     : {STAGE3_EPOCHS}")
+print(f"  resuming   : epoch {start_epoch} -> {STAGE3_EPOCHS}")
 print("=" * 60)
 
-for epoch in range(STAGE3_EPOCHS):
+for epoch in range(start_epoch, STAGE3_EPOCHS):
     train_total, train_ce, train_ord_loss, train_acc = train_one_epoch(
         model=model,
         dataloader=train_loader,
@@ -911,17 +548,17 @@ save_checkpoint(
     save_path=LAST_CKPT,
     rank=0,
 )
-print(f"✅ Stage 3 finished. Best val acc: {best_acc:.2f}%")
+print(f"✅ Stage 3 resumed training finished. Best val acc: {best_acc:.2f}%")
 print(f"   Best checkpoint : {BEST_S3_CKPT}")
 print(f"   Last checkpoint : {LAST_CKPT}")
 
 
 # ============================================================
-# Cell 13 — Load Best Stage 3 Checkpoint
+# Cell 8 — Load Final Best Stage 3 Checkpoint
 # ============================================================
-# Loads the best Stage 3 checkpoint (selected on validation) into
-# the model for evaluation. Self-contained: works right after
-# Cell 12, or in a fresh session (rebuilds model from CONFIG).
+# Loads the (possibly updated) best Stage 3 checkpoint into the
+# model for evaluation. Self-contained: works right after Cell 7,
+# or in a fresh session (rebuilds model from CONFIG).
 
 # Self-contained imports (in case this cell is run in a fresh session)
 import os
@@ -971,12 +608,12 @@ model.eval()
 
 best_val = ckpt.get("metrics", {}).get("accuracy", "N/A")
 if isinstance(best_val, (int, float)):
-    best_val_str = f"{best_val:.4f}"
+    best_val_str = f"{best_val * 100:.2f}%"
 else:
     best_val_str = str(best_val)
 
 print("=" * 60)
-print("Best Stage 3 Checkpoint Loaded")
+print("Final Best Stage 3 Checkpoint Loaded")
 print("=" * 60)
 print(f"  Checkpoint    : {BEST_S3_CKPT}")
 print(f"  Stage         : {ckpt.get('stage', 'N/A')}")
@@ -986,7 +623,7 @@ print("=" * 60)
 
 
 # ============================================================
-# Cell 14 — Validation Metrics
+# Cell 9 — Validation Metrics
 # ============================================================
 
 val_total, val_ce, val_ord_loss, val_acc_pct, val_preds, val_labels = validate_one_epoch(
@@ -1002,13 +639,13 @@ val_total, val_ce, val_ord_loss, val_acc_pct, val_preds, val_labels = validate_o
 class_names = full_train_dataset.get_class_names()
 val_metrics = compute_metrics(val_labels, val_preds, class_names)
 print("=" * 60)
-print("VALIDATION METRICS (best Stage 3 checkpoint)")
+print("VALIDATION METRICS (final best Stage 3 checkpoint)")
 print("=" * 60)
 print_metrics(val_metrics)
 
 
 # ============================================================
-# Cell 15 — One-Time Test Evaluation
+# Cell 10 — One-Time Test Evaluation
 # ============================================================
 
 test_total, test_ce, test_ord_loss, test_acc_pct, test_preds, test_labels = validate_one_epoch(
@@ -1030,6 +667,7 @@ print_metrics(test_metrics)
 # Persist test results
 results = {
     "checkpoint": os.path.join(CHECKPOINT_DIR, "best_stage3.pt"),
+    "resumed_from": "best_stage3.pt (continued Stage 3 to completion)",
     "metrics": {
         "accuracy": test_metrics["accuracy"],
         "balanced_accuracy": test_metrics["balanced_accuracy"],
@@ -1041,14 +679,14 @@ results = {
     "confusion_matrix": test_metrics["confusion_matrix"].tolist(),
     "class_names": class_names,
 }
-results_path = os.path.join(RESULTS_DIR, "test_results.json")
+results_path = os.path.join(RESULTS_DIR, "test_results_resume.json")
 with open(results_path, "w") as f:
     json.dump(results, f, indent=2)
 print(f"✅ Test results saved: {results_path}")
 
 
 # ============================================================
-# Cell 16 — Baseline Comparison
+# Cell 11 — Baseline Comparison
 # ============================================================
 
 print("=" * 60)
@@ -1061,13 +699,13 @@ print(f"{'DSCA-ViT v1':<22} {'~92.26%':>10} {'—':>14} {'—':>10}")
 print(f"{'DSCA-ViT v2':<22} {'87.22%':>10} {'—':>14} {'—':>10}")
 print(f"{'DSCA-ViT v3':<22} {'TBD':>10} {'—':>14} {'—':>10}")
 print(
-    f"{'DSS-ViT (this run)':<22} "
+    f"{'DSS-ViT (resumed)':<22} "
     f"{test_metrics['accuracy'] * 100:>9.2f}% "
     f"{test_metrics['balanced_accuracy'] * 100:>13.2f}% "
     f"{test_metrics['macro_f1']:>10.4f}"
 )
 print("-" * 60)
-print("\nPer-class recall (DSS-ViT):")
+print("\nPer-class recall (DSS-ViT, resumed):")
 for i, cls in enumerate(class_names):
     print(f"  {cls}: recall={test_metrics['per_class'][cls]['recall']:.4f}")
 print("=" * 60)
@@ -1084,7 +722,7 @@ print("=" * 60)
 
 
 # ============================================================
-# Cell 17 — Fusion Gate Telemetry
+# Cell 12 — Fusion Gate Telemetry
 # ============================================================
 # Lightweight telemetry: how much did the stain branch contribute
 # via the gated residual, and does the gate correlate with model
@@ -1156,15 +794,15 @@ print(f"  Pearson  : {pearson_r:.4f}")
 print(f"  Spearman : {spearman_r:.4f}")
 print("=" * 60)
 
-print("\n✅ DSS-ViT training complete.")
+print("\n✅ DSS-ViT resumed Stage 3 training complete.")
 
 
 # ============================================================
-# Cell 18 — Final Report
+# Cell 13 — Final Report
 # ============================================================
 
 print("=" * 60)
-print("DSS-ViT FINAL REPORT")
+print("DSS-ViT RESUMED STAGE 3 — FINAL REPORT")
 print("=" * 60)
 print(f"  Validation accuracy : {val_metrics['accuracy'] * 100:.2f}%")
 print(f"  Test accuracy       : {test_metrics['accuracy'] * 100:.2f}%")
@@ -1175,7 +813,7 @@ print(f"    ViT baseline       : 95.02%")
 print(f"    Original DSCA-ViT  : ~92.26%")
 print(f"    DSCA-ViT v2        : 87.22%")
 print(f"    DSCA-ViT v3        : TBD")
-print(f"    DSS-ViT (this run) : {test_metrics['accuracy'] * 100:.2f}%")
+print(f"    DSS-ViT (resumed)  : {test_metrics['accuracy'] * 100:.2f}%")
 print()
 print("  Success criteria:")
 print("    - Beat the plain ViT baseline on official test (95.02%)")

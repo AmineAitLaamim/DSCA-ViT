@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+data/
+experiments/*
+!experiments/.gitkeep
+outputs/*
+!outputs/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+
+balaha-et-al-2026-bridging-global-attention-and-local-hierarchies-a-robust-hybrid-ensemble-framework-with-multi (2).pdf
