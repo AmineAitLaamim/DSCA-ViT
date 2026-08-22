@@ -40,7 +40,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datasets import get_train_transform, get_test_transform
 from models_v2_2 import DSSViT, load_stain_stats, total_loss
 from utils.metrics_dss_vit import compute_metrics
-from utils.split_utils_wsi import get_or_create_wsi_split_indices
 from baseline.baseline_data import HER2BaselineDataset
 
 
@@ -558,17 +557,17 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
     train_transform = get_train_transform(image_size=image_size)
     test_transform = get_test_transform(image_size=image_size)
 
-    # Load the WSI-aware split (groups patches by slide, then 90/10 split)
-    logger.info(f"Loading WSI-aware split from '{split_indices_path}'")
-    val_fraction = config["dataset"].get("val_fraction", 0.10)
-
-    train_indices, val_indices = get_or_create_wsi_split_indices(
-        train_dir=train_dir,
-        test_dir=test_dir,
-        val_fraction=val_fraction,
-        seed=config["dataset"].get("val_seed", 42),
-        save_path=split_indices_path,
-    )
+    # LOAD the baseline's WSI-aware split (never regenerate)
+    if not os.path.exists(split_indices_path):
+        raise FileNotFoundError(
+            f"Baseline split not found at '{split_indices_path}'. "
+            "Train the baseline first — it creates this split."
+        )
+    logger.info(f"Loading baseline split from '{split_indices_path}'")
+    _split_data = np.load(split_indices_path)
+    train_indices = _split_data["train_indices"]
+    val_indices = _split_data["val_indices"]
+    logger.info(f"  Train: {len(train_indices)} | Val: {len(val_indices)}")
 
     # Both train AND val come from the TRAIN set (WSI-level stratified holdout)
     train_set_dataset = HER2BaselineDataset(root_dir=train_dir, transform=train_transform)

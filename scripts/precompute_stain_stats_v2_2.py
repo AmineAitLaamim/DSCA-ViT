@@ -26,7 +26,6 @@ import yaml
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from models_v2_2 import ColorDeconvolution, save_stain_stats
-from utils.split_utils_wsi import get_or_create_wsi_split_indices
 from baseline.baseline_data import HER2BaselineDataset
 
 
@@ -62,18 +61,17 @@ def main() -> None:
     print(f"Device: {device}")
 
     # ------------------------------------------------------------
-    # Load the WSI-aware split and use ONLY the training portion
+    # LOAD the baseline's WSI-aware split (never regenerate)
     # ------------------------------------------------------------
-    val_fraction = config["dataset"].get("val_fraction", 0.10)
-    val_seed = config["dataset"].get("val_seed", 42)
-
-    train_indices, _ = get_or_create_wsi_split_indices(
-        train_dir=train_dir,
-        test_dir=test_dir,
-        val_fraction=val_fraction,
-        seed=val_seed,
-        save_path=split_indices_path,
-    )
+    if not os.path.exists(split_indices_path):
+        raise FileNotFoundError(
+            f"Baseline split not found at '{split_indices_path}'. "
+            "Train the baseline first — it creates this split."
+        )
+    print(f"Loading baseline split from '{split_indices_path}'")
+    data = np.load(split_indices_path)
+    train_indices = data["train_indices"]
+    print(f"  Train: {len(train_indices)}")
 
     # Build the full training dataset with test transform (Resize + ToTensor, no aug)
     from torchvision import transforms

@@ -72,15 +72,22 @@ def parse_wsi_id(filename: str) -> Optional[str]:
         stem,
     )
     if match:
-        return f"slide_{match.group(2)}"
+        slide = match.group(2)
+        # Skip patterns where "slide" is really just a subset keyword
+        # (e.g. score_test, score_train) — those give NO slide identity.
+        if slide.lower() in {"score", "test", "train", "score_test", "score_train"}:
+            return stem
+        return f"slide_{slide}"
 
     # Pattern 2: her2-<class>-score_<subset>_<tile>
+    #            NOTE: score_test/score_train has NO real slide ID
     match = re.match(
-        r"^(?:her2|HER2)[-_](\d+|1\+|2\+|3\+)[-_]score[-_](.+?)[-_](\d+)$",
+        r"^(?:her2|HER2)[-_](\d+|1\+|2\+|3\+)[-_]score[-_]?(.+?)[-_](\d+)$",
         stem,
     )
     if match:
-        return f"slide_{match.group(2)}"
+        # No real WSI identity → treat each file as its own "slide"
+        return stem
 
     # Pattern 3: her2-<class>-<slide>  (no tile suffix)
     match = re.match(
@@ -177,6 +184,12 @@ def get_or_create_wsi_split_indices(
     train_files, train_labels = collect_dataset(train_dir)
     n_train = len(train_files)
     print(f"Collected {n_train} training images.")
+
+    # Diagnostics — print sample filenames so we can see the naming convention
+    print("\n--- Sample filenames ---")
+    for fp in train_files[:10]:
+        print(f"  {Path(fp).name}")
+    print("------------------------\n")
 
     # ------------------------------------------------------------
     # Parse WSI IDs and group by slide

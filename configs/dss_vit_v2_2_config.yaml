@@ -97,5 +97,5 @@ paths:
   # Generated files — written to experiment_dir, never into the Git repo
   stain_stats_path:    "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/DSS-ViT-v2.2/dss_vit_v2_2_001/stain_stats.json"
 
-  # WSI-aware split — group patches by slide, then 90/10 stratified split
-  split_indices_path:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/DSS-ViT-v2.2/dss_vit_v2_2_001/split_indices_wsi.npz"
+  # ⭐ Shared split — REUSE the baseline's WSI-aware split (no regeneration)
+  split_indices_path:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
