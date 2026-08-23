@@ -501,7 +501,7 @@ def run_training(config: dict, resume: bool, debug: bool, force_distributed: boo
     device = torch.device(f"cuda:{local_rank}" if torch.cuda.is_available() else "cpu")
     device_name = torch.cuda.get_device_name(local_rank) if torch.cuda.is_available() else "cpu"
 
-    seed = config["training"]["seed"]
+    seed = config["experiment"]["seed"]
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
