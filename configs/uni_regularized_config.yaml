@@ -1,5 +1,5 @@
 # ============================================================
-# UNI-Regularized Configuration — HER2-IHC-40x
+# UNI-Regularized Configuration - HER2-IHC-40x
 # ============================================================
 # Same architecture as UNI-baseline, with a regularized
 # fine-tuning recipe (AdamW + early stopping on val loss)
@@ -37,7 +37,7 @@ experiment:
   seed: 42
 
 # ------------------------------------------------------------
-# Training — 2 stages (UNI-baseline structure + AdamW + early stop)
+# Training - 2 stages (UNI-baseline structure + AdamW + early stop)
 # ------------------------------------------------------------
 training:
   stage1_epochs: 30                      # hard cap only
@@ -57,7 +57,7 @@ training:
   debug: false
 
 # ------------------------------------------------------------
-# Paths — Toubkal / UM6P (experiment: uni_regularized_001)
+# Paths - Toubkal / UM6P (experiment: uni_regularized_001)
 # ============================================================
 # All paths are absolute strings. YAML performs no interpolation.
 #
@@ -66,20 +66,18 @@ training:
 paths:
   data_root: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2"
 
-  # Dataset — already present on Toubkal, not in Git
+  # Dataset - already present on Toubkal, not in Git
   train_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train"
   test_dir:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test"
 
-  # Experiment artifacts — outside the Git repository
+  # Experiment artifacts - outside the Git repository
   experiment_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/UNI-Regularized/uni_regularized_001"
   checkpoint_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/UNI-Regularized/uni_regularized_001"
   log_dir:        "/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/UNI-Regularized/uni_regularized_001"
   results_dir:    "/home/amine.aitlaamim-ext/projects/DSCA-ViT/results/UNI-Regularized/uni_regularized_001"
 
-  # Shared WSI-aware split — LOAD ONLY, never regenerate
+  # Shared WSI-aware split - LOAD ONLY, never regenerate
   split_indices_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
 
-  # Local UNI checkpoint — no network calls, no HF downloads
+  # Local UNI checkpoint - no network calls, no HF downloads
   uni_checkpoint_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/pytorch_model.bin"
-</｜DSML｜>
-</｜DSML｜tool>

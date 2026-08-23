@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# SLURM Job Script â€” Train ViT-B16-CORN
+# SLURM Job Script — Train ViT-B16-CORN
 # Toubkal / UM6P HPC  |  partition: gpu (A100)  |  experiment: vit_b16_corn_001
 # ============================================================
 # Trains the ViT-B16 + CORN ordinal regression baseline using the
@@ -25,7 +25,7 @@
 #SBATCH --error=/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/ViT-B16-CORN/vit_b16_corn_001/slurm_%j.err
 
 # ============================================================
-# Workspace â€” must match configs/vit_b16_corn_config.yaml paths
+# Workspace — must match configs/vit_b16_corn_config.yaml paths
 # ============================================================
 WORKSPACE="/home/amine.aitlaamim-ext/projects/DSCA-ViT"
 EXPERIMENT="vit_b16_corn_001"
@@ -36,7 +36,7 @@ LOG_DIR="${WORKSPACE}/logs/ViT-B16-CORN/${EXPERIMENT}"
 mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
-# Environment â€” uv-managed .venv (no conda)
+# Environment — uv-managed .venv (no conda)
 # ------------------------------------------------------------
 
 # ------------------------------------------------------------
@@ -52,5 +52,6 @@ uv run python ViT-B16-CORN/train_vit_b16_corn.py --config "${CONFIG}"
 
 # Resume from last checkpoint:
 # uv run python ViT-B16-CORN/train_vit_b16_corn.py --config "${CONFIG}" --resume
-</ï½œDSMLï½œ>
-</write_to_file>
+<task_progress>
+- [ ] Verify YAML parses + SLURM has no stray tags
+- [ ] Check other configs/SLURM for the same leak

@@ -79,5 +79,3 @@ paths:
 
   # Shared WSI-aware split — LOAD ONLY, never regenerate
   split_indices_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
-</｜DSML｜>
-</｜DSML｜tool>
