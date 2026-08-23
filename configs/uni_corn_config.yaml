@@ -1,0 +1,49 @@
+# UNI-CORN Configuration - HER2-IHC-40x
+# ============================================================
+# UNI backbone + CORN ordinal regression head. Uses the
+# original UNI-baseline recipe (Adam, no weight decay, no
+# early stopping), except loss and label conversion.
+#
+# Experiment: uni_corn_001
+# ============================================================
+
+model:
+  backbone: "vit_large_patch16_224"
+  image_size: 224
+  num_classes: 4
+
+dataset:
+  name: "HER2-IHC-40x"
+  classes: ["class_0", "class_1+", "class_2+", "class_3+"]
+  image_size: 224
+  val_fraction: 0.10
+
+experiment:
+  name: "uni_corn_001"
+  seed: 42
+
+training:
+  stage1_epochs: 30
+  stage2_epochs: 30
+  stage1_lr: 1.0e-4
+  stage2_backbone_lr: 1.0e-5
+  stage2_head_lr: 1.0e-4
+  batch_size: 32
+  amp: false
+  weight_decay: 0.0
+  gradient_clip: false
+  num_workers: 8
+  optimizer: "Adam"
+  main_metric: "accuracy"
+  debug: false
+
+paths:
+  data_root: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2"
+  train_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train"
+  test_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test"
+  experiment_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/UNI-CORN/uni_corn_001"
+  checkpoint_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/UNI-CORN/uni_corn_001"
+  log_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/UNI-CORN/uni_corn_001"
+  results_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/results/UNI-CORN/uni_corn_001"
+  split_indices_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
+  uni_checkpoint_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/pytorch_model.bin"
