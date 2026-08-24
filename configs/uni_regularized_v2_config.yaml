@@ -1,0 +1,92 @@
+# ============================================================
+# UNI-Regularized-v2 Configuration - HER2-IHC-40x
+# ============================================================
+# Follow-up to UNI-Regularized (v1) with THREE regularization
+# changes bundled together:
+#   1. Stochastic depth  : UNI backbone drop_path_rate=0.2
+#   2. Head dropout      : nn.Dropout(0.3) before the Linear head
+#   3. Rebalanced wd     : Stage 2 backbone wd=0.5, head wd=0.05
+#                          -> lr*wd parity = 5.00e-06 both sides
+#
+# Everything else identical to v1 (2-stage recipe, split file,
+# transforms, early stopping, checkpoint selection).
+#
+# Experiment: uni_regularized_v2_001
+# ============================================================
+
+# ------------------------------------------------------------
+# Model — v2 changes: drop_path_rate + head_dropout
+# ------------------------------------------------------------
+model:
+  backbone: "vit_large_patch16_224"   # UNI (DINOv2, mass100k)
+  image_size: 224
+  num_classes: 4
+  drop_path_rate: 0.2                 # NEW in v2 (stochastic depth)
+  head_dropout: 0.3                   # NEW in v2 (dropout before Linear)
+
+# ------------------------------------------------------------
+# Dataset
+# ------------------------------------------------------------
+dataset:
+  name: "HER2-IHC-40x"
+  classes:
+    - "class_0"
+    - "class_1+"
+    - "class_2+"
+    - "class_3+"
+  image_size: 224
+  val_fraction: 0.10     # must match the shared split file
+
+# ------------------------------------------------------------
+# Experiment
+# ------------------------------------------------------------
+experiment:
+  name: "uni_regularized_v2_001"
+  seed: 42
+
+# ------------------------------------------------------------
+# Training - 2 stages (identical to v1 + rebalanced wd in Stage 2)
+# ------------------------------------------------------------
+training:
+  stage1_epochs: 30                      # hard cap only
+  stage2_epochs: 30                      # hard cap only
+  stage1_lr: 1.0e-4
+  stage2_backbone_lr: 1.0e-5
+  stage2_head_lr: 1.0e-4
+  batch_size: 32                         # per GPU
+  amp: false                             # disabled
+  weight_decay_stage1: 0.0
+  weight_decay_stage2_backbone: 0.5      # NEW in v2 (rebalanced)
+  weight_decay_stage2_head: 0.05         # unchanged from v1
+  optimizer: "AdamW"
+  early_stopping_patience: 7
+  early_stopping_min_delta: 1.0e-4
+  num_workers: 8
+  main_metric: "accuracy"
+  debug: false
+
+# ------------------------------------------------------------
+# Paths - Toubkal / UM6P (experiment: uni_regularized_v2_001)
+# ============================================================
+# All paths are absolute strings. YAML performs no interpolation.
+#
+# Workspace root: /home/amine.aitlaamim-ext/projects/DSCA-ViT
+# ============================================================
+paths:
+  data_root: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2"
+
+  # Dataset - already present on Toubkal, not in Git
+  train_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train"
+  test_dir:  "/home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test"
+
+  # Experiment artifacts - outside the Git repository
+  experiment_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/UNI-Regularized-v2/uni_regularized_v2_001"
+  checkpoint_dir: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/UNI-Regularized-v2/uni_regularized_v2_001"
+  log_dir:        "/home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/UNI-Regularized-v2/uni_regularized_v2_001"
+  results_dir:    "/home/amine.aitlaamim-ext/projects/DSCA-ViT/results/UNI-Regularized-v2/uni_regularized_v2_001"
+
+  # Shared WSI-aware split - LOAD ONLY, never regenerate
+  split_indices_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz"
+
+  # Local UNI checkpoint - no network calls, no HF downloads
+  uni_checkpoint_path: "/home/amine.aitlaamim-ext/projects/DSCA-ViT/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/pytorch_model.bin"
