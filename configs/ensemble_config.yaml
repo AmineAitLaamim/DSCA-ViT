@@ -1,0 +1,53 @@
+# ============================================================
+# Ensemble Configuration — HER2 evaluation of trained models
+# ============================================================
+#
+# Evaluates ensembles of already-trained models on the HER2-IHC-40x
+# dataset. NO training is performed. Four variants:
+#   vit_ce_uni_ce            (no TTA)
+#   vit_ce_uni_ce_tta        (TTA)
+#   vit_ce_uni_ce_vit_corn   (no TTA)
+#   vit_ce_uni_ce_vit_corn_tta (TTA)
+#
+# The goal is to see whether simple probability averaging of
+# complementary models (optionally with TTA) beats the best
+# single-model test accuracy of 94.69%.
+#
+# NOTE: only probabilities are averaged, never logits. For CORN this
+# is the chain-rule-reconstructed [B,4] probs, not raw [B,3] logits.
+# ============================================================
+
+# ------------------------------------------------------------
+# Paths — Toubkal / UM6P
+# ============================================================
+paths:
+  data_root: /home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2
+  train_dir: /home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/train
+  test_dir:  /home/amine.aitlaamim-ext/projects/DSCA-ViT/data/HER2/test
+
+  # Generated artifacts are nested TWO levels: <base>/<variant>/<experiment>/
+  log_dir_base:     /home/amine.aitlaamim-ext/projects/DSCA-ViT/logs/Ensemble
+  results_dir_base: /home/amine.aitlaamim-ext/projects/DSCA-ViT/results/Ensemble
+
+  # Shared WSI-aware split — LOAD ONLY, never regenerate
+  split_indices_path: /home/amine.aitlaamim-ext/projects/DSCA-ViT/experiments/ViT-Baseline/plain_vit_baseline_001/split_indices_wsi.npz
+
+# ------------------------------------------------------------
+# Checkpoints — already-trained best_stage2.pt (read-only)
+# ============================================================
+checkpoints:
+  vit_ce:   /home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/ViT-Baseline/plain_vit_baseline_001/best_stage2.pt
+  uni_ce:   /home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/UNI-Baseline/uni_baseline_001/best_stage2.pt
+  vit_corn: /home/amine.aitlaamim-ext/projects/DSCA-ViT/checkpoints/ViT-B16-CORN/vit_b16_corn_001/best_stage2.pt
+
+  # UNIBaselineModel must be CONSTRUCTED from the local UNI backbone
+  # weights before its fine-tuned state_dict (uni_ce above) is applied.
+  uni_backbone: /home/amine.aitlaamim-ext/projects/DSCA-ViT/assets/ckpts/vit_large_patch16_224.dinov2.uni_mass100k/pytorch_model.bin
+
+# ------------------------------------------------------------
+# Experiment
+# ============================================================
+experiment:
+  seed: 42
+  batch_size: 32
+  num_workers: 8
