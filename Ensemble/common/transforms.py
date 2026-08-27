@@ -50,17 +50,14 @@ def get_model_transform(
         raise ValueError(
             f"Unknown model_name '{model_name}'. Expected one of {MODEL_NAMES}."
         )
-    normalize = (
-        transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
-        if model_name in ("vit_ce", "vit_corn")
-        else transforms.Identity()
-    )
+    # vit_ce / vit_corn get ImageNet normalization in the dataloader;
+    # uni_ce does NOT (UNI normalizes internally, raw RGB [0,1]).
     ops = [
         transforms.Resize((image_size, image_size)),
         transforms.ToTensor(),
     ]
-    if not isinstance(normalize, transforms.Identity):
-        ops.append(normalize)
+    if model_name in ("vit_ce", "vit_corn"):
+        ops.append(transforms.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD))
     return transforms.Compose(ops)
 
 
