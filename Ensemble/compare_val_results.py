@@ -18,12 +18,14 @@ import os
 import sys
 from pathlib import Path
 
-# Run by path — loop over all four variant folders.
+# Run by path — loop over all six variant folders.
 VARIANTS = [
-    ("vit_ce_uni_ce",           ["vit_ce", "uni_ce"],                       False),
-    ("vit_ce_uni_ce_tta",       ["vit_ce", "uni_ce"],                       True),
-    ("vit_ce_uni_ce_vit_corn",  ["vit_ce", "uni_ce", "vit_corn"],           False),
-    ("vit_ce_uni_ce_vit_corn_tta", ["vit_ce", "uni_ce", "vit_corn"],        True),
+    ("vit_ce_uni_ce",             ["vit_ce", "uni_ce"],                       False),
+    ("vit_ce_uni_ce_tta",         ["vit_ce", "uni_ce"],                       True),
+    ("vit_ce_uni_ce_vit_corn",    ["vit_ce", "uni_ce", "vit_corn"],           False),
+    ("vit_ce_uni_ce_vit_corn_tta",["vit_ce", "uni_ce", "vit_corn"],           True),
+    ("vit_corn_uni_ce",           ["vit_corn", "uni_ce"],                     False),
+    ("vit_corn_uni_ce_tta",       ["vit_corn", "uni_ce"],                     True),
 ]
 
 
