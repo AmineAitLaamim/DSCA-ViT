@@ -1,11 +1,12 @@
 #!/bin/bash
 # ============================================================
-# SLURM Job Script — Ensemble: ViT-B16 CORN + UNI CE (validation)
+# SLURM Job Script — Ensemble: ViT-B16 CORN + UNI CE (official test)
 # Toubkal / UM6P HPC  |  partition: gpu (A100)  |  experiment: vit_corn_uni_ce_001
 # ============================================================
-# Runs VALIDATION only (default, no --eval-test) to keep the
-# official test set protected until validation results are
-# reviewed. Only probabilities are averaged, never logits.
+# Evaluates the ensemble on the official test set (locked).
+# Only probabilities are averaged, never logits.
+# Uses --force because the shared lock currently names another
+# variant; the official-test comparison across variants requires it.
 #
 # Usage:
 #   sbatch slurm/slurm_ensemble/evaluate_vit_corn_uni_ce.slurm
@@ -34,14 +35,13 @@ LOG_DIR="${WORKSPACE}/logs/Ensemble/vit_corn_uni_ce/vit_corn_uni_ce_001"
 mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
-# Run VALIDATION (default; no --eval-test).
-# Official test is COMMENTED OUT until validation is reviewed.
+# Run official-test evaluation (--force overrides the shared lock)
 # ------------------------------------------------------------
 cd "${REPO_DIR}"
 
 uv run python Ensemble/vit_corn_uni_ce/evaluate_vit_corn_uni_ce.py \
-    --config "${CONFIG}"
+    --config "${CONFIG}" --eval-test --force
 
-# Official test (once, locked) — enable only after review:
+# Validation only (default) if you prefer not to touch the test set:
 # uv run python Ensemble/vit_corn_uni_ce/evaluate_vit_corn_uni_ce.py \
-#     --config "${CONFIG}" --eval-test
+#     --config "${CONFIG}"

@@ -1,11 +1,12 @@
 #!/bin/bash
 # ============================================================
-# SLURM Job Script — Ensemble: ViT-B16 + UNI CE + TTA (validation)
+# SLURM Job Script — Ensemble: ViT-B16 + UNI CE + TTA (official test)
 # Toubkal / UM6P HPC  |  partition: gpu (A100)  |  experiment: vit_corn_uni_ce_tta_001
 # ============================================================
-# Runs VALIDATION (with TTA) on the default path (no --eval-test)
-# to protect the official test set until validation is reviewed.
+# Evaluates the ensemble (with TTA) on the official test set (locked).
 # Only probabilities are averaged, never logits.
+# Uses --force because the shared lock currently names another
+# variant; the official-test comparison across variants requires it.
 #
 # Usage:
 #   sbatch slurm/slurm_ensemble/evaluate_vit_corn_uni_ce_tta.slurm
@@ -34,14 +35,13 @@ LOG_DIR="${WORKSPACE}/logs/Ensemble/vit_corn_uni_ce_tta/vit_corn_uni_ce_tta_001"
 mkdir -p "${LOG_DIR}"
 
 # ------------------------------------------------------------
-# Run VALIDATION with TTA (default; no --eval-test).
-# Leave default; enable --eval-test only after validation review.
+# Run official-test evaluation with TTA (--force overrides the lock)
 # ------------------------------------------------------------
 cd "${REPO_DIR}"
 
 uv run python Ensemble/vit_corn_uni_ce_tta/evaluate_vit_corn_uni_ce_tta.py \
-    --config "${CONFIG}"
+    --config "${CONFIG}" --eval-test --force
 
-# Official test (once, locked) — enable only after review:
+# Validation only (default) if you prefer not to touch the test set:
 # uv run python Ensemble/vit_corn_uni_ce_tta/evaluate_vit_corn_uni_ce_tta.py \
-#     --config "${CONFIG}" --eval-test
+#     --config "${CONFIG}"
