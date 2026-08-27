@@ -79,6 +79,23 @@ except ImportError:
             return img, label
 
 
+from color_deconv import ColorDeconvolution
+from stain_stats import save_stain_stats
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Precompute global H/DAB stain statistics (UNI-Stain-EarlyFusion)."
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="configs/uni_stain_earlyfusion_config.yaml",
+        help="Path to the UNI-Stain-EarlyFusion config file.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
     args = parse_args()
 
@@ -184,18 +201,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-from color_deconv import ColorDeconvolution
-from stain_stats import save_stain_stats
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Precompute global H/DAB stain statistics (UNI-Stain-EarlyFusion)."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="configs/uni_stain_earlyfusion_config.yaml",
-        help="Path to the UNI-Stain-EarlyFusion config file.",
-    )
-    return parser.parse_args()
