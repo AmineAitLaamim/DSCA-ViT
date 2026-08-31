@@ -6,6 +6,10 @@
 # Evaluates the ensemble on the official test set once (locked).
 # Only probabilities are averaged, never logits.
 #
+# --force is included because the shared test lock already names another
+# variant (vit_ce_uni_ce_vit_corn_tta); running vit_ce_uni_ce officially
+# deliberately overrides it. Remove --force to respect the lock default.
+#
 # Usage:
 #   sbatch slurm/slurm_ensemble/evaluate_vit_ce_uni_ce.slurm
 # ============================================================
@@ -38,4 +42,4 @@ mkdir -p "${LOG_DIR}"
 cd "${REPO_DIR}"
 
 uv run python Ensemble/vit_ce_uni_ce/evaluate_vit_ce_uni_ce.py \
-    --config "${CONFIG}" --eval-test
+    --config "${CONFIG}" --eval-test --force
