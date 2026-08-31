@@ -6,6 +6,10 @@
 # Evaluates the 3-model ensemble on the official test set once
 # (locked). Only probs are averaged; CORN uses its [B,4] probs.
 #
+# --force is included because the shared test lock already names
+# another variant; running vit_ce_uni_ce_vit_corn officially
+# deliberately overrides it. Remove --force to respect the lock.
+#
 # Usage:
 #   sbatch slurm/slurm_ensemble/evaluate_vit_ce_uni_ce_vit_corn.slurm
 # ============================================================
@@ -38,4 +42,4 @@ mkdir -p "${LOG_DIR}"
 cd "${REPO_DIR}"
 
 uv run python Ensemble/vit_ce_uni_ce_vit_corn/evaluate_vit_ce_uni_ce_vit_corn.py \
-    --config "${CONFIG}" --eval-test
+    --config "${CONFIG}" --eval-test --force
